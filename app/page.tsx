@@ -1,15 +1,20 @@
 import AddTodoForm from "@/components/AddTodoForm";
+import TodoTable from "@/components/todoTable";
+import { getTodoListAction } from "@/prisma/actions/todo.action";
 
-export default function Home() {
-  // const todos = await getTodoListAction();
+export default async function Home() {
+  const todos = await getTodoListAction();
   
 
 
   return (
     // <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
     <div className="container">  
-      {/* <pre>{ JSON.stringify(todos, undefined, 2) }</pre> */}
-        <AddTodoForm />
+      <TodoTable />
+      <ul>
+        {todos.map(todo => <li key={todo.id}> {todo.title} </li>)}
+      </ul>
+      <AddTodoForm />
     </div>
   );
 }
