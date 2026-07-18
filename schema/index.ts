@@ -9,6 +9,8 @@ export const formSchema = z.object({
         .string()
         .min(20, "Body must be at least 20 characters.")
         .max(100, "Body must be at most 100 characters.").optional(),
+    completed: z
+                .boolean(),
 });
 
 export type TodoFormValues = z.infer<typeof formSchema>;

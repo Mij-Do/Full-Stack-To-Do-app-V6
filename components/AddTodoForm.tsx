@@ -25,8 +25,8 @@ import { Input } from "@/components/ui/input"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { formSchema, TodoFormValues } from "@/schema";
-import z from "zod";
 import { createTodoListAction } from "@/prisma/actions/todo.action";
+import { Checkbox } from "./ui/checkbox";
 
 
 const AddTodoForm = () => {
@@ -36,11 +36,12 @@ const AddTodoForm = () => {
         defaultValues: {
             title: "",
             body: "",
+            completed: false,
         },
     });
 
     const onSubmit = async (data: TodoFormValues) => {
-        await createTodoListAction({title: data.title, body: data.body});
+        await createTodoListAction({title: data.title, body: data.body, completed: data.completed});
     }
 
     return (
@@ -53,33 +54,32 @@ const AddTodoForm = () => {
             </DialogTrigger>
             <form id="form-rhf-demo" onSubmit={form.handleSubmit(onSubmit)}>
                 <DialogContent className="sm:max-w-sm">
-                    
                     <FieldGroup>
                         <Controller
-                        name="title"
-                        control={form.control}
-                        render={({ field, fieldState }) => (
-                            <Field data-invalid={fieldState.invalid}>
-                            <FieldLabel htmlFor="form-rhf-demo-title">
-                                Title
-                            </FieldLabel>
-                            <Input
-                                {...field}
-                                id="form-rhf-demo-title"
-                                aria-invalid={fieldState.invalid}
-                                placeholder="Title"
-                                autoComplete="off"
-                            />
-                            {fieldState.invalid && (
-                                <FieldError errors={[fieldState.error]} />
+                            name="title"
+                            control={form.control}
+                            render={({ field, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                <FieldLabel htmlFor="form-rhf-demo-title">
+                                    Title
+                                </FieldLabel>
+                                <Input
+                                    {...field}
+                                    id="form-rhf-demo-title"
+                                    aria-invalid={fieldState.invalid}
+                                    placeholder="Title"
+                                    autoComplete="off"
+                                />
+                                {fieldState.invalid && (
+                                    <FieldError errors={[fieldState.error]} />
+                                )}
+                                </Field>
                             )}
-                            </Field>
-                        )}
                         />
                         <Controller
-                        name="body"
-                        control={form.control}
-                        render={({ field, fieldState }) => (
+                            name="body"
+                            control={form.control}
+                            render={({ field, fieldState }) => (
                             <Field data-invalid={fieldState.invalid}>
                             <FieldLabel htmlFor="form-rhf-demo-description">
                                 Description
@@ -105,20 +105,38 @@ const AddTodoForm = () => {
                             </Field>
                         )}
                         />
+                        <Controller
+                            name="completed"
+                            control={form.control}
+                            render={({ field: {onChange, value}, fieldState }) => (
+                                <Field data-invalid={fieldState.invalid}>
+                                <FieldLabel>
+                                    Completed
+                                </FieldLabel>
+                                <Checkbox
+                                    checked={value}
+                                    onCheckedChange={onChange}
+                                />
+                                {fieldState.invalid && (
+                                    <FieldError errors={[fieldState.error]} />
+                                )}
+                                </Field>
+                            )}
+                        />
                     </FieldGroup>
                     
                     <DialogFooter>
-                    <Field orientation="horizontal">
-                        <DialogClose asChild>
-                        <Button> <X /> </Button>
-                        </DialogClose>
-                        <Button type="button" variant="outline" onClick={() => form.reset()}>
-                        Reset
-                        </Button>
-                        <Button type="submit" form="form-rhf-demo">
-                            Submit
-                        </Button>
-                    </Field>
+                        <Field orientation="horizontal">
+                            <DialogClose asChild>
+                                <Button> <X /> </Button>
+                            </DialogClose>
+                            <Button type="button" variant="outline" onClick={() => form.reset()}>
+                                Reset
+                            </Button>
+                            <Button type="submit" form="form-rhf-demo">
+                                Submit
+                            </Button>
+                        </Field>
                     </DialogFooter>
                 </DialogContent>
             </form>
