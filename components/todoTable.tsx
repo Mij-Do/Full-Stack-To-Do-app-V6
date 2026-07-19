@@ -1,5 +1,3 @@
-"use client"
-
 import {
     Table,
     TableBody,
@@ -10,13 +8,10 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Button } from "./ui/button"
-import { Pen, Trash } from "lucide-react"
 import { ITodos } from "@/interfaces";
 import { Badge } from "./ui/badge";
-import { deleteTodoListAction } from "@/prisma/actions/todo.action";
-import { useState } from "react";
-import Spinner from "./spinner";
+import TodosTableActions from "./TodosTableActions";
+
 
 interface IProps {
     todos: ITodos[];
@@ -24,7 +19,6 @@ interface IProps {
 
 
 export default function TodoTable({todos}: IProps) {
-    const [loading, setLoading] = useState(false);
     return (
         <Table>
         <TableCaption>A list of your recent invoices.</TableCaption>
@@ -47,20 +41,7 @@ export default function TodoTable({todos}: IProps) {
                     {todo.completed ? <Badge>Completed</Badge> : <Badge variant={"destructive"}>UnCompleted</Badge> }
                 </TableCell>
                 <TableCell className="flex items-center justify-end space-x-2">
-                    <Button size={"icon"}>
-                        <Pen size={16}/>
-                    </Button>
-                    <Button 
-                        size={"icon"} 
-                        variant={"destructive"}
-                        onClick={async () => {
-                            setLoading(true);
-                            await deleteTodoListAction({id: todo.id});
-                            setLoading(false);
-                        }}
-                    >
-                        {loading ? <Spinner /> : <Trash size={16}/>}
-                    </Button>
+                    <TodosTableActions id={todo.id}/>
                 </TableCell>
             </TableRow>
             ))}
