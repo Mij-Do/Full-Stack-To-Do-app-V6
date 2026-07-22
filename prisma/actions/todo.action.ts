@@ -7,8 +7,11 @@ import { ITodos } from "@/interfaces";
 
 const prisma = new PrismaClient();
 
-export const getTodoListAction = async () => {
+export const getUserTodoListAction = async ({userId}: {userId: string|null}) => {
     return await prisma.todo.findMany({
+        where: {
+            user_id: userId as string,
+        },
         orderBy: {
             createdAt: "desc",
         }

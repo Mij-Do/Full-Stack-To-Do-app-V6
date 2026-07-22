@@ -21,7 +21,7 @@ interface IProps {
 export default function TodoTable({todos}: IProps) {
     return (
         <Table>
-        <TableCaption>A list of your recent invoices.</TableCaption>
+        <TableCaption>A list of your Todos</TableCaption>
         <TableHeader>
             <TableRow>
                 <TableHead className="w-25">ID</TableHead>
@@ -32,18 +32,18 @@ export default function TodoTable({todos}: IProps) {
             </TableRow>
         </TableHeader>
         <TableBody>
-            {todos.map((todo) => (
-            <TableRow key={todo.id}>
-                <TableCell className="font-medium">{todo.id}</TableCell>
-                <TableCell>{todo.title}</TableCell>
-                <TableCell>{todo.body}</TableCell>
-                <TableCell>
-                    {todo.completed ? <Badge>Completed</Badge> : <Badge variant={"destructive"}>UnCompleted</Badge> }
-                </TableCell>
-                <TableCell className="flex items-center justify-end space-x-2">
-                    <TodosTableActions key={todo.id} todo={todo}/>
-                </TableCell>
-            </TableRow>
+            {!todos.length ? <TableRow><TableCell className="text-center" colSpan={5}>{"You Don't Have Todos Yet!!"}</TableCell></TableRow> : todos.map((todo) => (
+                <TableRow key={todo.id}>
+                    <TableCell className="font-medium">{todo.id}</TableCell>
+                    <TableCell>{todo.title}</TableCell>
+                    <TableCell>{todo.body}</TableCell>
+                    <TableCell>
+                        {todo.completed ? <Badge>Completed</Badge> : <Badge variant={"destructive"}>UnCompleted</Badge> }
+                    </TableCell>
+                    <TableCell className="flex items-center justify-end space-x-2">
+                        <TodosTableActions key={todo.id} todo={todo}/>
+                    </TableCell>
+                </TableRow>
             ))}
         </TableBody>
         <TableFooter>
