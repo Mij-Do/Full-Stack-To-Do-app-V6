@@ -41,14 +41,14 @@ export default function TodoTable({todos}: IProps) {
                     {todo.completed ? <Badge>Completed</Badge> : <Badge variant={"destructive"}>UnCompleted</Badge> }
                 </TableCell>
                 <TableCell className="flex items-center justify-end space-x-2">
-                    <TodosTableActions id={todo.id}/>
+                    <TodosTableActions key={todo.id} id={todo.id}/>
                 </TableCell>
             </TableRow>
             ))}
         </TableBody>
         <TableFooter>
             <TableRow>
-                <TableCell colSpan={3}>Total</TableCell>
+                <TableCell colSpan={4}>Total</TableCell>
                 <TableCell className="text-right">{todos.length}</TableCell>
             </TableRow>
         </TableFooter>

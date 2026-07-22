@@ -15,7 +15,7 @@ const TodosTableActions = ({id}: IProps) => {
     return (
         <>
             <Button size={"icon"}>
-                        <Pen size={16}/>
+                <Pen size={16}/>
             </Button>
             <Button 
                 size={"icon"} 

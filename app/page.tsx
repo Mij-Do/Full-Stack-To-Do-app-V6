@@ -6,9 +6,8 @@ export default async function Home() {
   const todos = await getTodoListAction();
 
   return (
-    // <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-    <div className="container">  
-      <AddTodoForm />
+    <div className="container mx-auto flex flex-col flex-1 items-center justify-center">
+      <AddTodoForm />  
       <TodoTable todos={todos}/>
     </div>
   );

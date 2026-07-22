@@ -109,17 +109,17 @@ const AddTodoForm = () => {
                             name="completed"
                             control={form.control}
                             render={({ field: {onChange, value}, fieldState }) => (
-                                <Field data-invalid={fieldState.invalid}>
-                                <FieldLabel>
-                                    Completed
-                                </FieldLabel>
-                                <Checkbox
-                                    checked={value}
-                                    onCheckedChange={onChange}
-                                />
-                                {fieldState.invalid && (
-                                    <FieldError errors={[fieldState.error]} />
-                                )}
+                                <Field className="w-5" data-invalid={fieldState.invalid}>
+                                    <FieldLabel>
+                                        Completed
+                                    </FieldLabel>
+                                    <Checkbox
+                                        checked={value}
+                                        onCheckedChange={onChange}
+                                    />
+                                    {fieldState.invalid && (
+                                        <FieldError errors={[fieldState.error]} />
+                                    )}
                                 </Field>
                             )}
                         />
