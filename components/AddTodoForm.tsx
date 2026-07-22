@@ -47,7 +47,7 @@ const AddTodoForm = () => {
         setLoading(true);
         try {
             await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
-            form.reset(); // تفريغ النموذج بعد الإضافة الناجحة
+            form.reset(); 
             setOpen(false);
         } catch (error) {
             console.error(error);
