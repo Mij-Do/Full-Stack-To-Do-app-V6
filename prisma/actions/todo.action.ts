@@ -14,12 +14,13 @@ export const getTodoListAction = async () => {
         }
     });
 }
-export const createTodoListAction = async ({title, body, completed}: {title: string, body?: string | undefined, completed?: boolean}) => {
+export const createTodoListAction = async ({title, body, completed, userId}: {title: string, body?: string | undefined, completed?: boolean, userId: string | null}) => {
     await prisma.todo.create({
         data: {
             title,
             body,
             completed,
+            user_id: userId as string,
         }
     });
     revalidatePath("/");

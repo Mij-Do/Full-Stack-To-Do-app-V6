@@ -30,7 +30,7 @@ import { Checkbox } from "./ui/checkbox";
 import { useState } from "react";
 import Spinner from "./spinner";
 
-const AddTodoForm = () => {
+const AddTodoForm = ({userId}: {userId: string | null}) => {
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
     
@@ -46,7 +46,7 @@ const AddTodoForm = () => {
     const onSubmit = async (data: TodoFormValues) => {
         setLoading(true);
         try {
-            await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
+            await createTodoListAction({ title: data.title, body: data.body, completed: data.completed, userId });
             form.reset(); 
             setOpen(false);
         } catch (error) {
