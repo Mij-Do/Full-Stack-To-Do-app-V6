@@ -15,7 +15,7 @@ interface IProps {
 const TodosTableActions = ({todo}: IProps) => {
     const [loading, setLoading] = useState(false);
     return (
-        <>
+        <div className='w-full flex flex-row justify-between items-center md:justify-end md:gap-1'>
             <EditTodoForm key={todo.id} todo={todo}/>
             <Button 
                 size={"icon"} 
@@ -29,7 +29,7 @@ const TodosTableActions = ({todo}: IProps) => {
             >
                 {loading ? <Spinner /> : <Trash size={16}/>}
             </Button>
-        </>
+        </div>
     )
 }
 
