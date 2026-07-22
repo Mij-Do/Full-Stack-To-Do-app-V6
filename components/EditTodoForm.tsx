@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import { Plus, X } from 'lucide-react';
+import { Pen, X } from 'lucide-react';
 import {
     Dialog,
     DialogClose,
@@ -25,32 +25,41 @@ import { Input } from "@/components/ui/input";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { formSchema, TodoFormValues } from "@/schema";
-import { createTodoListAction } from "@/prisma/actions/todo.action";
+import { updateTodoListAction } from "@/prisma/actions/todo.action";
 import { Checkbox } from "./ui/checkbox";
 import { useState } from "react";
 import Spinner from "./spinner";
+import { ITodos } from "@/interfaces";
 
-const AddTodoForm = () => {
+interface IProps {
+    todo: ITodos;
+}
+
+const EditTodoForm = ({ todo }: IProps) => {
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
-    
+
     const form = useForm<TodoFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            title: "",
-            body: "",
-            completed: false,
+            title: todo.title,
+            body: (todo.body as string) || "",
+            completed: todo.completed,
         },
     });
 
     const onSubmit = async (data: TodoFormValues) => {
         setLoading(true);
         try {
-            await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
-            form.reset(); // تفريغ النموذج بعد الإضافة الناجحة
+            await updateTodoListAction({
+                id: todo.id,
+                title: data.title,
+                body: data.body as string,
+                completed: data.completed,
+            });
             setOpen(false);
         } catch (error) {
-            console.error(error);
+            console.error("Failed to update todo:", error);
         } finally {
             setLoading(false);
         }
@@ -59,9 +68,8 @@ const AddTodoForm = () => {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button>
-                    <Plus />
-                    New ToDo
+                <Button size="icon">
+                    <Pen size={16} />
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-sm">
@@ -72,10 +80,10 @@ const AddTodoForm = () => {
                             control={form.control}
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel htmlFor="add-title">Title</FieldLabel>
+                                    <FieldLabel htmlFor="edit-title">Edit Title</FieldLabel>
                                     <Input
                                         {...field}
-                                        id="add-title"
+                                        id="edit-title"
                                         aria-invalid={fieldState.invalid}
                                         placeholder="Title"
                                         autoComplete="off"
@@ -91,11 +99,11 @@ const AddTodoForm = () => {
                             control={form.control}
                             render={({ field, fieldState }) => (
                                 <Field data-invalid={fieldState.invalid}>
-                                    <FieldLabel htmlFor="add-description">Description</FieldLabel>
+                                    <FieldLabel htmlFor="edit-description">Edit Description</FieldLabel>
                                     <InputGroup>
                                         <InputGroupTextarea
                                             {...field}
-                                            id="add-description"
+                                            id="edit-description"
                                             placeholder="Description..."
                                             rows={6}
                                             className="min-h-24 resize-none"
@@ -128,11 +136,13 @@ const AddTodoForm = () => {
                             )}
                         />
                     </FieldGroup>
-                    
+
                     <DialogFooter className="mt-4">
                         <Field orientation="horizontal">
                             <DialogClose asChild>
-                                <Button type="button" variant="outline"> <X /> </Button>
+                                <Button type="button" variant="outline">
+                                    <X size={16} />
+                                </Button>
                             </DialogClose>
                             <Button type="button" variant="outline" onClick={() => form.reset()}>
                                 Reset
@@ -148,4 +158,4 @@ const AddTodoForm = () => {
     );
 };
 
-export default AddTodoForm;
+export default EditTodoForm;

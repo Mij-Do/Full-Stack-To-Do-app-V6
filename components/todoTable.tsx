@@ -41,7 +41,7 @@ export default function TodoTable({todos}: IProps) {
                     {todo.completed ? <Badge>Completed</Badge> : <Badge variant={"destructive"}>UnCompleted</Badge> }
                 </TableCell>
                 <TableCell className="flex items-center justify-end space-x-2">
-                    <TodosTableActions key={todo.id} id={todo.id}/>
+                    <TodosTableActions key={todo.id} todo={todo}/>
                 </TableCell>
             </TableRow>
             ))}
