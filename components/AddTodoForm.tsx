@@ -27,10 +27,13 @@ import { Controller, useForm } from "react-hook-form"
 import { formSchema, TodoFormValues } from "@/schema";
 import { createTodoListAction } from "@/prisma/actions/todo.action";
 import { Checkbox } from "./ui/checkbox";
+import { useState } from "react";
+import Spinner from "./spinner";
 
 
 const AddTodoForm = () => {
-    
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
     const form = useForm<TodoFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -41,11 +44,14 @@ const AddTodoForm = () => {
     });
 
     const onSubmit = async (data: TodoFormValues) => {
+        setLoading(true);
         await createTodoListAction({title: data.title, body: data.body, completed: data.completed});
+        setLoading(false);
+        setOpen(false);
     }
 
     return (
-        <Dialog>
+        <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button>
                     <Plus />
@@ -133,8 +139,8 @@ const AddTodoForm = () => {
                             <Button type="button" variant="outline" onClick={() => form.reset()}>
                                 Reset
                             </Button>
-                            <Button type="submit" form="form-rhf-demo">
-                                Submit
+                            <Button type="submit" form="form-rhf-demo" disabled={loading}>
+                                {loading ? <Spinner /> : "Submit"}
                             </Button>
                         </Field>
                     </DialogFooter>

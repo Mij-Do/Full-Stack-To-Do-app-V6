@@ -7,7 +7,11 @@ import { PrismaClient } from "../../generated/prisma";
 const prisma = new PrismaClient();
 
 export const getTodoListAction = async () => {
-    return await prisma.todo.findMany();
+    return await prisma.todo.findMany({
+        orderBy: {
+            createdAt: "desc",
+        }
+    });
 }
 export const createTodoListAction = async ({title, body, completed}: {title: string, body?: string | undefined, completed?: boolean}) => {
     await prisma.todo.create({

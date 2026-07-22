@@ -20,6 +20,7 @@ const TodosTableActions = ({id}: IProps) => {
             <Button 
                 size={"icon"} 
                 variant={"destructive"}
+                disabled={loading}
                 onClick={async () => {
                     setLoading(true);
                     await deleteTodoListAction({id});
