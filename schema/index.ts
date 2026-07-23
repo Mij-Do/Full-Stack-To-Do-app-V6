@@ -7,7 +7,7 @@ export const formSchema = z.object({
         .max(32, "Title must be at most 32 characters."),
     body: z
         .string()
-        .min(20, "Body must be at least 20 characters.")
+        .min(10, "Body must be at least 10 characters.")
         .max(100, "Body must be at most 100 characters.").optional(),
     completed: z
                 .boolean(),

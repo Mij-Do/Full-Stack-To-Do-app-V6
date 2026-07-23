@@ -123,7 +123,7 @@ const EditTodoForm = ({ todo }: IProps) => {
                             name="completed"
                             control={form.control}
                             render={({ field: { onChange, value }, fieldState }) => (
-                                <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
+                                <Field className="flex w-5 items-center gap-2" data-invalid={fieldState.invalid}>
                                     <Checkbox
                                         checked={value}
                                         onCheckedChange={onChange}
