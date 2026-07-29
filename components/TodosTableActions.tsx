@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { Pen, Trash } from 'lucide-react';
+import { Trash } from 'lucide-react';
 import { Button } from './ui/button';
 import Spinner from './spinner';
 import { useState } from 'react';
@@ -9,28 +9,29 @@ import EditTodoForm from './EditTodoForm';
 import { ITodos } from '@/interfaces';
 
 interface IProps {
-    todo: ITodos;
+  todo: ITodos;
 }
 
-const TodosTableActions = ({todo}: IProps) => {
-    const [loading, setLoading] = useState(false);
-    return (
-        <div className='w-full flex flex-row justify-between items-center md:justify-end md:gap-1'>
-            <EditTodoForm key={todo.id} todo={todo}/>
-            <Button 
-                size={"icon"} 
-                variant={"destructive"}
-                disabled={loading}
-                onClick={async () => {
-                    setLoading(true);
-                    await deleteTodoListAction({ id : todo.id});
-                    setLoading(false);
-                }}
-            >
-                {loading ? <Spinner /> : <Trash size={16}/>}
-            </Button>
-        </div>
-    )
-}
+const TodosTableActions = ({ todo }: IProps) => {
+  const [loading, setLoading] = useState(false);
 
-export default TodosTableActions;   
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      await deleteTodoListAction({ id: todo.id });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <EditTodoForm todo={todo} />
+      <Button size="icon" variant="destructive" disabled={loading} onClick={handleDelete} aria-label="Delete todo">
+        {loading ? <Spinner /> : <Trash size={16} />}
+      </Button>
+    </div>
+  );
+};
+
+export default TodosTableActions;
