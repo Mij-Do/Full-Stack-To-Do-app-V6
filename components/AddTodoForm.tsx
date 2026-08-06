@@ -16,7 +16,7 @@ const AddTodoForm = ({ userId }: { userId: string | null }) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const form = useForm<TodoFormValues>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
@@ -25,7 +25,7 @@ const AddTodoForm = ({ userId }: { userId: string | null }) => {
     },
   });
 
-  const onSubmit = async (data: TodoFormValues) => {
+  const onSubmit = async (data: Parameters<typeof form.handleSubmit>[0] extends (values: infer T) => any ? T : unknown) => {
     setLoading(true);
     try {
       await createTodoListAction({ title: data.title, body: data.body, completed: data.completed, userId });

@@ -25,7 +25,9 @@ export const getUserTodoListAction = async ({ userId }: { userId: string | null 
     },
   });
 };
-export const createTodoListAction = async (payload: unknown & { userId: string | null }) => {
+export const createTodoListAction = async (
+  payload: { userId: string | null } & { title: string; body?: string; completed: boolean }
+) => {
   const validated = validateTaskCreate(payload);
 
   await prisma.todo.create({

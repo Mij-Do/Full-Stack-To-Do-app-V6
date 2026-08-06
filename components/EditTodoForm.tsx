@@ -21,7 +21,7 @@ const EditTodoForm = ({ todo }: IProps) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const form = useForm<TodoFormValues>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: todo.title,
@@ -30,7 +30,7 @@ const EditTodoForm = ({ todo }: IProps) => {
     },
   });
 
-  const onSubmit = async (data: TodoFormValues) => {
+  const onSubmit = async (data: Parameters<typeof form.handleSubmit>[0] extends (values: infer T) => any ? T : unknown) => {
     setLoading(true);
     try {
       await updateTodoListAction({

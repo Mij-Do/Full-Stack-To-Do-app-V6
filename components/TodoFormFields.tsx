@@ -1,6 +1,6 @@
 'use client';
 
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, FieldValues, Path } from 'react-hook-form';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   InputGroup,
@@ -10,27 +10,26 @@ import {
 } from '@/components/ui/input-group';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { TodoFormValues } from '@/schema';
 
-interface TodoFormFieldsProps {
-  control: Control<TodoFormValues>;
+interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
+  control: Control<TFieldValues>;
   titleLabel?: string;
   descriptionLabel?: string;
   titleId?: string;
   descriptionId?: string;
 }
 
-export function TodoFormFields({
+export function TodoFormFields<TFieldValues extends FieldValues>({
   control,
   titleLabel = 'Title',
   descriptionLabel = 'Description',
   titleId = 'todo-title',
   descriptionId = 'todo-description',
-}: TodoFormFieldsProps) {
+}: TodoFormFieldsProps<TFieldValues>) {
   return (
     <FieldGroup>
       <Controller
-        name="title"
+        name={'title' as Path<TFieldValues>}
         control={control}
         render={({ field, fieldState }) => (
           <Field data-invalid={fieldState.invalid}>
@@ -48,7 +47,7 @@ export function TodoFormFields({
       />
 
       <Controller
-        name="body"
+        name={'body' as Path<TFieldValues>}
         control={control}
         render={({ field, fieldState }) => (
           <Field data-invalid={fieldState.invalid}>
@@ -72,7 +71,7 @@ export function TodoFormFields({
       />
 
       <Controller
-        name="completed"
+        name={'completed' as Path<TFieldValues>}
         control={control}
         render={({ field: { onChange, value }, fieldState }) => (
           <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
