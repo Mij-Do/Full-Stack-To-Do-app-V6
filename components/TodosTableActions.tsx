@@ -4,21 +4,23 @@ import { Trash } from 'lucide-react';
 import { Button } from './ui/button';
 import Spinner from './spinner';
 import { useState } from 'react';
-import { deleteTodoListAction } from '@/prisma/actions/todo.action';
 import EditTodoForm from './EditTodoForm';
 import { ITodos } from '@/interfaces';
 
 interface IProps {
   todo: ITodos;
+  onDelete: (id: string) => Promise<void>;
+  onToggle: (todo: ITodos) => Promise<void>;
+  isPending: boolean;
 }
 
-const TodosTableActions = ({ todo }: IProps) => {
+const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
   const [loading, setLoading] = useState(false);
 
   const handleDelete = async () => {
     setLoading(true);
     try {
-      await deleteTodoListAction({ id: todo.id });
+      await onDelete(todo.id);
     } finally {
       setLoading(false);
     }

@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.22",
@@ -17,6 +20,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.23.0",
+    "react-hook-form": "^7.45.0",
     "next": "16.2.9",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.1",
@@ -30,15 +34,26 @@
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "@testing-library/dom": "^9.0.0",
     "@types/node": "^20.19.43",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.0.0",
+    "@vitest/coverage-c8": "^0.33.0",
+    "@vitest/ui": "^1.0.0",
+    "babel-jest": "^29.0.0",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "jsdom": "^22.0.0",
     "prisma": "6.19",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
-    "typescript": "^5.9.3"
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^1.0.0"
   }
 }

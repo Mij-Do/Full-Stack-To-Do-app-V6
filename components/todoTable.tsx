@@ -1,3 +1,6 @@
+'use client';
+
+import { useOptimistic, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -11,12 +14,75 @@ import {
 import { ITodos } from '@/interfaces';
 import { Badge } from './ui/badge';
 import TodosTableActions from './TodosTableActions';
+import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
 
 interface IProps {
   todos: ITodos[];
 }
 
-export default function TodoTable({ todos }: IProps) {
+type TodoAction =
+  | { type: 'delete'; id: string }
+  | { type: 'toggle'; id: string; completed: boolean }
+  | { type: 'rollback'; nextState: ITodos[] };
+
+export default function TodoTable({ todos: initialTodos }: IProps) {
+  const [todos, updateTodos] = useOptimistic<ITodos[], TodoAction>(initialTodos, (state, action) => {
+    switch (action.type) {
+      case 'delete':
+        return state.filter((todo) => todo.id !== action.id);
+      case 'toggle':
+        return state.map((todo) =>
+          todo.id === action.id ? { ...todo, completed: action.completed } : todo
+        );
+      case 'rollback':
+        return action.nextState;
+      default:
+        return state;
+    }
+  });
+
+  const [pendingIds, setPendingIds] = useState<Record<string, boolean>>({});
+
+  const setPending = (id: string, value: boolean) => {
+    setPendingIds((current) => ({
+      ...current,
+      [id]: value,
+    }));
+  };
+
+  const handleToggle = async (todo: ITodos) => {
+    const previousTodos = todos;
+    const nextCompleted = !todo.completed;
+
+    updateTodos({ type: 'toggle', id: todo.id, completed: nextCompleted });
+    setPending(todo.id, true);
+
+    try {
+      await toggleTodoListAction({ id: todo.id, completed: nextCompleted });
+    } catch (error) {
+      console.error('Failed to update completion status', error);
+      updateTodos({ type: 'rollback', nextState: previousTodos });
+    } finally {
+      setPending(todo.id, false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const previousTodos = todos;
+
+    updateTodos({ type: 'delete', id });
+    setPending(id, true);
+
+    try {
+      await deleteTodoListAction({ id });
+    } catch (error) {
+      console.error('Failed to delete todo', error);
+      updateTodos({ type: 'rollback', nextState: previousTodos });
+    } finally {
+      setPending(id, false);
+    }
+  };
+
   if (!todos.length) {
     return (
       <div className="w-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -38,7 +104,12 @@ export default function TodoTable({ todos }: IProps) {
               {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
             </div>
             <div className="mt-4 flex justify-end border-t pt-3">
-              <TodosTableActions todo={todo} />
+              <TodosTableActions
+                todo={todo}
+                onDelete={handleDelete}
+                onToggle={handleToggle}
+                isPending={Boolean(pendingIds[todo.id])}
+              />
             </div>
           </div>
         ))}
@@ -68,7 +139,12 @@ export default function TodoTable({ todos }: IProps) {
                   {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
                 </TableCell>
                 <TableCell className="text-right">
-                  <TodosTableActions todo={todo} />
+                  <TodosTableActions
+                    todo={todo}
+                    onDelete={handleDelete}
+                    onToggle={handleToggle}
+                    isPending={Boolean(pendingIds[todo.id])}
+                  />
                 </TableCell>
               </TableRow>
             ))}
