@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TodoTable from '@/components/todoTable';
+import AddTodoForm from '@/components/AddTodoForm';
 import { ITodos } from '@/interfaces';
 import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
 
 vi.mock('@/prisma/actions/todo.action', () => ({
+  createTodoListAction: vi.fn(),
   deleteTodoListAction: vi.fn(),
   toggleTodoListAction: vi.fn(),
+  updateTodoListAction: vi.fn(),
 }));
 
 function deferred<T = void>() {
@@ -26,14 +29,26 @@ const todos: ITodos[] = [
     title: 'First Todo',
     body: 'First todo body content.',
     completed: false,
+    createdAt: new Date('2026-01-03T00:00:00.000Z'),
   },
   {
     id: '2',
     title: 'Second Todo',
     body: 'Second todo description.',
     completed: true,
+    createdAt: new Date('2026-01-02T00:00:00.000Z'),
+  },
+  {
+    id: '3',
+    title: 'Third Todo',
+    body: null,
+    completed: false,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
   },
 ];
+
+const visibleTitles = () =>
+  screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent);
 
 describe('TodoTable component', () => {
   beforeEach(() => {
@@ -184,13 +199,13 @@ describe('TodoTable component', () => {
     await user.type(searchbox, 'second');
     expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
     expect(screen.queryAllByText('First Todo')).toHaveLength(0);
-    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 of 3 tasks/)).toBeInTheDocument();
 
     await user.clear(searchbox);
     await user.type(searchbox, 'body content');
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
     expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
-    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 of 3 tasks/)).toBeInTheDocument();
 
     await user.clear(searchbox);
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
@@ -209,14 +224,15 @@ describe('TodoTable component', () => {
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+    expect(screen.getAllByText('Third Todo').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Showing 2 of 3 tasks/)).toBeInTheDocument();
 
     await user.type(screen.getByRole('searchbox', { name: 'Search tasks' }), 'second');
     expect(screen.queryAllByText('First Todo')).toHaveLength(0);
     expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
     expect(screen.getByText('No tasks match your search and filter.')).toBeInTheDocument();
     expect(screen.queryByText("You don't have any todos yet.")).not.toBeInTheDocument();
-    expect(screen.getByText(/Showing 0 of 2 tasks/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 0 of 3 tasks/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Clear search and filters' }));
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
@@ -226,7 +242,7 @@ describe('TodoTable component', () => {
     await user.click(screen.getByRole('button', { name: 'Completed' }));
     expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
     expect(screen.queryAllByText('First Todo')).toHaveLength(0);
-    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 of 3 tasks/)).toBeInTheDocument();
   });
 
   it('exposes accessible search and filter controls with documented counts', () => {
@@ -239,8 +255,198 @@ describe('TodoTable component', () => {
     });
 
     expect(
-      screen.getByText('Showing 2 of 2 tasks · 1 active · 1 completed (all tasks)')
+      screen.getByText('Showing 3 of 3 tasks · 2 active · 1 completed (all tasks)')
     ).toBeInTheDocument();
-    expect(screen.getAllByText('2 of 2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3 of 3').length).toBeGreaterThanOrEqual(1);
+
+    expect(screen.getByRole('group', { name: 'Sort tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Newest first' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Oldest first' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('defaults to newest first and preserves the current list order', () => {
+    render(<TodoTable todos={todos} />);
+
+    expect(visibleTitles()).toEqual(['First Todo', 'Second Todo', 'Third Todo']);
+    expect(screen.getByRole('button', { name: 'Newest first' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('sorts oldest first by createdAt date and updates the list immediately', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Oldest first' }));
+
+    expect(visibleTitles()).toEqual(['Third Todo', 'Second Todo', 'First Todo']);
+    expect(screen.getByRole('button', { name: 'Oldest first' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Newest first' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Newest first' }));
+
+    expect(visibleTitles()).toEqual(['First Todo', 'Second Todo', 'Third Todo']);
+  });
+
+  it('composes sorting with search', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search tasks' }), 'ir');
+
+    expect(visibleTitles()).toEqual(['First Todo', 'Third Todo']);
+    expect(screen.getByText(/Showing 2 of 3 tasks/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Oldest first' }));
+
+    expect(visibleTitles()).toEqual(['Third Todo', 'First Todo']);
+    expect(screen.getByText(/Showing 2 of 3 tasks/)).toBeInTheDocument();
+  });
+
+  it('composes sorting with status filters', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Active' }));
+    expect(visibleTitles()).toEqual(['First Todo', 'Third Todo']);
+
+    await user.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(visibleTitles()).toEqual(['Third Todo', 'First Todo']);
+    expect(screen.getByText(/Showing 2 of 3 tasks/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Completed' }));
+    expect(visibleTitles()).toEqual(['Second Todo']);
+    expect(screen.getByText(/Showing 1 of 3 tasks/)).toBeInTheDocument();
+  });
+
+  it('keeps todos without a createdAt last without mutating the source array', async () => {
+    const source: ITodos[] = [
+      { id: 'x', title: 'Undated Todo', body: null, completed: false },
+      { id: 'y', title: 'Dated New', body: null, completed: false, createdAt: new Date('2026-02-01T00:00:00.000Z') },
+      { id: 'z', title: 'Dated Old', body: null, completed: false, createdAt: new Date('2026-01-01T00:00:00.000Z') },
+    ];
+    const snapshot = [...source];
+
+    render(<TodoTable todos={source} />);
+
+    expect(visibleTitles()).toEqual(['Dated New', 'Dated Old', 'Undated Todo']);
+    expect(source).toEqual(snapshot);
+    expect(source.map((todo) => todo.id)).toEqual(['x', 'y', 'z']);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Oldest first' }));
+
+    expect(visibleTitles()).toEqual(['Dated Old', 'Dated New', 'Undated Todo']);
+    expect(source.map((todo) => todo.id)).toEqual(['x', 'y', 'z']);
+  });
+
+  it('keeps filter and sort selections while an optimistic action updates the list', async () => {
+    const d = deferred();
+    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Active' }));
+    await user.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(visibleTitles()).toEqual(['Third Todo', 'First Todo']);
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark Third Todo as completed' })[0]);
+    await waitFor(() => expect(screen.queryAllByText('Third Todo')).toHaveLength(0));
+
+    expect(screen.getByRole('button', { name: 'Active' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Oldest first' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Newest first' })).toHaveAttribute('aria-pressed', 'false');
+
+    d.resolve();
+
+    await waitFor(() => expect(screen.getAllByText('Third Todo').length).toBeGreaterThan(0));
+  });
+
+  it('renders long unbroken titles and truncates long descriptions in previews', () => {
+    const longTitle = 'Supercalifragilisticexpialidocious'.repeat(4);
+    const longBody = 'Descriptionwithoutanyspaces'.repeat(5);
+    const expectedPreview = `${longBody.slice(0, 50)}...`;
+
+    render(
+      <TodoTable
+        todos={[{ id: 'long', title: longTitle, body: longBody, completed: false, createdAt: new Date() }]}
+      />
+    );
+
+    expect(screen.getAllByText(longTitle).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(expectedPreview).length).toBeGreaterThan(0);
+    expect(screen.queryByText(longBody)).not.toBeInTheDocument();
+  });
+
+  it('shows the truncated description preview in both the card and the table', () => {
+    const longBody = 'B'.repeat(100);
+    const expectedPreview = `${'B'.repeat(50)}...`;
+
+    render(
+      <TodoTable
+        todos={[{ id: 'preview', title: 'Preview Todo', body: longBody, completed: false, createdAt: new Date() }]}
+      />
+    );
+
+    expect(screen.getAllByText(expectedPreview).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(longBody)).not.toBeInTheDocument();
+  });
+
+  it('keeps short descriptions unchanged in previews', () => {
+    render(<TodoTable todos={todos} />);
+
+    expect(screen.getAllByText('First todo body content.').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('First todo body content....')).not.toBeInTheDocument();
+  });
+
+  it('opens the edit dialog with the complete original description, not the preview string', async () => {
+    const longBody = 'D'.repeat(100);
+
+    render(
+      <TodoTable
+        todos={[{ id: 'edit-long', title: 'Edit Long Todo', body: longBody, completed: false, createdAt: new Date() }]}
+      />
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+
+    expect(await screen.findByText('Edit Description')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Description')).toHaveValue(longBody);
+  });
+
+  it('keeps the layout guard classes on the mobile card and previews (jsdom cannot verify layout)', () => {
+    render(<TodoTable todos={todos} />);
+
+    const heading = screen.getAllByRole('heading', { level: 3 })[0];
+    expect(heading.className).toContain('wrap-anywhere');
+
+    const card = heading.closest('.rounded-xl');
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain('min-w-0');
+
+    const preview = screen.getAllByText('First todo body content.').find((el) => el.tagName === 'P');
+    expect(preview?.className).toContain('wrap-anywhere');
+  });
+
+  it('opens the edit dialog with its form fields', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+
+    expect(await screen.findByText('Edit Title')).toBeInTheDocument();
+    expect(screen.getByText('Edit Description')).toBeInTheDocument();
+  });
+
+  it('opens the add todo dialog with its form fields', async () => {
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+
+    expect(await screen.findByText('Title')).toBeInTheDocument();
+    expect(screen.getByText('Description')).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
   });
 });

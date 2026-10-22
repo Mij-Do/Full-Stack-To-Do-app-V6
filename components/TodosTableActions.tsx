@@ -46,13 +46,21 @@ const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
         checked={todo.completed}
         disabled={busy}
         aria-busy={busy}
+        className="after:-inset-y-4 md:after:-inset-y-2"
         aria-label={
           todo.completed ? `Mark ${todo.title} as active` : `Mark ${todo.title} as completed`
         }
         onCheckedChange={handleToggle}
       />
       <EditTodoForm todo={todo} />
-      <Button size="icon" variant="destructive" disabled={busy} onClick={handleDelete} aria-label="Delete todo">
+      <Button
+        size="icon"
+        variant="destructive"
+        className="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
+        disabled={busy}
+        onClick={handleDelete}
+        aria-label="Delete todo"
+      >
         {loading ? <Spinner /> : <Trash size={16} />}
       </Button>
     </div>

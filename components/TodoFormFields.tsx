@@ -75,7 +75,11 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
         control={control}
         render={({ field: { onChange, value }, fieldState }) => (
           <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
-            <Checkbox checked={value} onCheckedChange={onChange} />
+            <Checkbox
+              checked={value}
+              onCheckedChange={onChange}
+              className="after:-inset-y-4 sm:after:-inset-y-2"
+            />
             <FieldLabel>Completed</FieldLabel>
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
           </Field>

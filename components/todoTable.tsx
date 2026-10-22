@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { ITodos } from '@/interfaces';
 import { Badge } from './ui/badge';
 import TodosTableActions from './TodosTableActions';
+import { truncateDescription } from '@/lib/utils';
 import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
 
 interface IProps {
@@ -30,11 +31,42 @@ type TodoAction =
 
 type StatusFilter = 'all' | 'active' | 'completed';
 
+type SortOrder = 'newest' | 'oldest';
+
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' },
 ];
+
+const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+];
+
+const getCreatedAtTime = (value?: Date | string): number | null => {
+  if (!value) return null;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const sortByCreatedAt = (items: ITodos[], order: SortOrder): ITodos[] => {
+  const dated: { item: ITodos; time: number }[] = [];
+  const undated: ITodos[] = [];
+
+  items.forEach((item) => {
+    const time = getCreatedAtTime(item.createdAt);
+    if (time === null) {
+      undated.push(item);
+    } else {
+      dated.push({ item, time });
+    }
+  });
+
+  dated.sort((a, b) => (order === 'newest' ? b.time - a.time : a.time - b.time));
+
+  return [...dated.map(({ item }) => item), ...undated];
+};
 
 export default function TodoTable({ todos: initialTodos }: IProps) {
   const [todos, updateTodos] = useOptimistic<ITodos[], TodoAction>(initialTodos, (state, action) => {
@@ -57,6 +89,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [sort, setSort] = useState<SortOrder>('newest');
 
   const setPending = (id: string, value: boolean) => {
     pendingIdsRef.current = {
@@ -137,6 +170,8 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
     return matchesStatus && matchesQuery;
   });
 
+  const visibleTodos = sortByCreatedAt(filteredTodos, sort);
+
   const activeCount = todos.filter((todo) => !todo.completed).length;
   const completedCount = todos.length - activeCount;
 
@@ -174,8 +209,8 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
     <div className="w-full space-y-4">
       {errorBanner}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="w-full sm:max-w-xs">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="w-full sm:max-w-xs sm:shrink-0">
           <Label htmlFor="todo-search" className="sr-only">
             Search tasks
           </Label>
@@ -187,19 +222,37 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <div role="group" aria-label="Filter tasks by status" className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((filter) => (
-            <Button
-              key={filter.value}
-              type="button"
-              size="sm"
-              variant={status === filter.value ? 'default' : 'outline'}
-              aria-pressed={status === filter.value}
-              onClick={() => setStatus(filter.value)}
-            >
-              {filter.label}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Filter tasks by status" className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((filter) => (
+              <Button
+                key={filter.value}
+                type="button"
+                size="sm"
+                className="min-h-11 lg:min-h-0"
+                variant={status === filter.value ? 'default' : 'outline'}
+                aria-pressed={status === filter.value}
+                onClick={() => setStatus(filter.value)}
+              >
+                {filter.label}
+              </Button>
+            ))}
+          </div>
+          <div role="group" aria-label="Sort tasks" className="flex flex-wrap gap-2">
+            {SORT_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                className="min-h-11 lg:min-h-0"
+                variant={sort === option.value ? 'default' : 'outline'}
+                aria-pressed={sort === option.value}
+                onClick={() => setSort(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -227,12 +280,16 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
       ) : (
         <>
           <div className="grid gap-4 md:hidden">
-            {filteredTodos.map((todo) => (
-              <div key={todo.id} className="rounded-xl border bg-card p-4 shadow-sm">
+            {visibleTodos.map((todo) => (
+              <div key={todo.id} className="min-w-0 rounded-xl border bg-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-2">
-                    <h3 className="truncate font-semibold">{todo.title}</h3>
-                    {todo.body && <p className="text-sm text-muted-foreground">{todo.body}</p>}
+                    <h3 className="wrap-anywhere font-semibold">{todo.title}</h3>
+                    {todo.body && (
+                      <p className="wrap-anywhere text-sm text-muted-foreground">
+                        {truncateDescription(todo.body)}
+                      </p>
+                    )}
                   </div>
                   {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
                 </div>
@@ -264,10 +321,12 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTodos.map((todo) => (
+                {visibleTodos.map((todo) => (
                   <TableRow key={todo.id}>
-                    <TableCell className="font-medium">{todo.title}</TableCell>
-                    <TableCell>{todo.body}</TableCell>
+                    <TableCell className="wrap-anywhere whitespace-normal font-medium">{todo.title}</TableCell>
+                    <TableCell className="wrap-anywhere whitespace-normal">
+                      {todo.body ? truncateDescription(todo.body) : null}
+                    </TableCell>
                     <TableCell>
                       {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
                     </TableCell>

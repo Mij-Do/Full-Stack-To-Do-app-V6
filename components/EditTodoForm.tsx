@@ -50,7 +50,7 @@ const EditTodoForm = ({ todo }: IProps) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="icon" aria-label="Edit todo">
+        <Button size="icon" className="min-h-11 min-w-11 md:min-h-0 md:min-w-0" aria-label="Edit todo">
           <Pen size={16} />
         </Button>
       </DialogTrigger>
