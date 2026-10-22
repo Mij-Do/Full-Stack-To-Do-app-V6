@@ -12,7 +12,7 @@ import { useState } from 'react';
 import Spinner from './spinner';
 import { TodoFormFields } from './TodoFormFields';
 
-const AddTodoForm = ({ userId }: { userId: string | null }) => {
+const AddTodoForm = () => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -28,7 +28,7 @@ const AddTodoForm = ({ userId }: { userId: string | null }) => {
   const onSubmit = async (data: Parameters<typeof form.handleSubmit>[0] extends (values: infer T) => any ? T : unknown) => {
     setLoading(true);
     try {
-      await createTodoListAction({ title: data.title, body: data.body, completed: data.completed, userId });
+      await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
       form.reset();
       setOpen(false);
     } catch (error) {

@@ -34,13 +34,10 @@ npm install
 ```
 
 2. Environment
-- Create a `.env` file at the project root. Typical variables (example names — adapt to your setup):
+- Copy `.env.example` and fill in real values in two gitignored files:
 
-```
-DATABASE_URL="mongodb+srv://<user>:<pass>@cluster.example.mongodb.net/mydb?retryWrites=true&w=majority"
-NEXT_PUBLIC_CLERK_FRONTEND_API=...
-CLERK_API_KEY=...
-```
+  - **`.env`** — `DATABASE_URL` (this file is read by both Next.js and the Prisma CLI; `prisma.config.ts` loads it via `dotenv`). Use your Atlas URI (`mongodb+srv://...`) or a local one (`mongodb://127.0.0.1:27017/todo-dev`). Get the URI from your own Atlas project or local MongoDB — do not commit real credentials.
+  - **`.env.local`** — Clerk keys (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`), written automatically by `npx clerk@latest env pull`.
 
 3. Prisma generate / migrate (development)
 

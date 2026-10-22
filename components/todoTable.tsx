@@ -1,6 +1,6 @@
 'use client';
 
-import { useOptimistic, useState } from 'react';
+import { startTransition, useOptimistic, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -54,33 +54,43 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
     const previousTodos = todos;
     const nextCompleted = !todo.completed;
 
-    updateTodos({ type: 'toggle', id: todo.id, completed: nextCompleted });
-    setPending(todo.id, true);
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        updateTodos({ type: 'toggle', id: todo.id, completed: nextCompleted });
+        setPending(todo.id, true);
 
-    try {
-      await toggleTodoListAction({ id: todo.id, completed: nextCompleted });
-    } catch (error) {
-      console.error('Failed to update completion status', error);
-      updateTodos({ type: 'rollback', nextState: previousTodos });
-    } finally {
-      setPending(todo.id, false);
-    }
+        try {
+          await toggleTodoListAction({ id: todo.id, completed: nextCompleted });
+        } catch (error) {
+          console.error('Failed to update completion status', error);
+          updateTodos({ type: 'rollback', nextState: previousTodos });
+        } finally {
+          setPending(todo.id, false);
+          resolve();
+        }
+      });
+    });
   };
 
   const handleDelete = async (id: string) => {
     const previousTodos = todos;
 
-    updateTodos({ type: 'delete', id });
-    setPending(id, true);
+    await new Promise<void>((resolve) => {
+      startTransition(async () => {
+        updateTodos({ type: 'delete', id });
+        setPending(id, true);
 
-    try {
-      await deleteTodoListAction({ id });
-    } catch (error) {
-      console.error('Failed to delete todo', error);
-      updateTodos({ type: 'rollback', nextState: previousTodos });
-    } finally {
-      setPending(id, false);
-    }
+        try {
+          await deleteTodoListAction({ id });
+        } catch (error) {
+          console.error('Failed to delete todo', error);
+          updateTodos({ type: 'rollback', nextState: previousTodos });
+        } finally {
+          setPending(id, false);
+          resolve();
+        }
+      });
+    });
   };
 
   if (!todos.length) {

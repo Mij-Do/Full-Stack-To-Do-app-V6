@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
+import { auth } from '@clerk/nextjs/server';
 import { PrismaClient } from '../../generated/prisma';
 import {
   validateTaskCreate,
@@ -11,23 +12,18 @@ import {
 
 const prisma = new PrismaClient();
 
-export const getUserTodoListAction = async ({ userId }: { userId: string | null }) => {
+const requireUserId = async (): Promise<string> => {
+  const { userId } = await auth();
+
   if (!userId) {
-    return [];
+    throw new Error('Unauthorized');
   }
 
-  return await prisma.todo.findMany({
-    where: {
-      user_id: userId,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  return userId;
 };
-export const createTodoListAction = async (
-  payload: { userId: string | null } & { title: string; body?: string; completed: boolean }
-) => {
+
+export const createTodoListAction = async (payload: { title: string; body?: string; completed: boolean }) => {
+  const userId = await requireUserId();
   const validated = validateTaskCreate(payload);
 
   await prisma.todo.create({
@@ -35,30 +31,39 @@ export const createTodoListAction = async (
       title: validated.title,
       body: validated.body,
       completed: validated.completed,
-      user_id: payload.userId as string,
+      user_id: userId,
     },
   });
 
   revalidatePath('/');
 };
+
 export const deleteTodoListAction = async (payload: unknown) => {
+  const userId = await requireUserId();
   const { id } = validateTaskDelete(payload);
 
-  await prisma.todo.delete({
+  const { count } = await prisma.todo.deleteMany({
     where: {
       id,
+      user_id: userId,
     },
   });
+
+  if (count === 0) {
+    throw new Error('Todo not found');
+  }
 
   revalidatePath('/');
 };
 
 export const updateTodoListAction = async (payload: unknown) => {
+  const userId = await requireUserId();
   const validated = validateTaskUpdate(payload);
 
-  await prisma.todo.update({
+  const { count } = await prisma.todo.updateMany({
     where: {
       id: validated.id,
+      user_id: userId,
     },
     data: {
       title: validated.title,
@@ -67,20 +72,30 @@ export const updateTodoListAction = async (payload: unknown) => {
     },
   });
 
+  if (count === 0) {
+    throw new Error('Todo not found');
+  }
+
   revalidatePath('/');
 };
 
 export const toggleTodoListAction = async (payload: unknown) => {
+  const userId = await requireUserId();
   const validated = validateTaskToggle(payload);
 
-  await prisma.todo.update({
+  const { count } = await prisma.todo.updateMany({
     where: {
       id: validated.id,
+      user_id: userId,
     },
     data: {
       completed: validated.completed,
     },
   });
+
+  if (count === 0) {
+    throw new Error('Todo not found');
+  }
 
   revalidatePath('/');
 };
