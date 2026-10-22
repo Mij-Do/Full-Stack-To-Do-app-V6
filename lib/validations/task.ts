@@ -22,10 +22,21 @@ export const taskBaseSchema = z.object({
   completed: z.boolean(),
 });
 
+// Update-side description rules: keep '' as '' so an explicitly cleared
+// description can be distinguished from an omitted field (undefined), allow
+// legacy descriptions shorter than 10 characters, and preserve the 100-char max.
+export const taskUpdateBodySchema = z
+  .string()
+  .trim()
+  .max(100, 'Body must be at most 100 characters.')
+  .optional();
+
 export const taskCreateSchema = taskBaseSchema;
 export const taskUpdateSchema = taskBaseSchema.extend({
   id: z.string(),
+  body: taskUpdateBodySchema,
 });
+export const taskEditFormSchema = taskUpdateSchema.omit({ id: true });
 export const taskToggleSchema = z.object({
   id: z.string(),
   completed: z.boolean(),

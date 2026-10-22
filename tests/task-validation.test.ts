@@ -1,4 +1,10 @@
-import { taskCreateSchema, taskToggleSchema, taskUpdateSchema, taskIdSchema } from '@/lib/validations/task';
+import {
+  taskCreateSchema,
+  taskEditFormSchema,
+  taskToggleSchema,
+  taskUpdateSchema,
+  taskIdSchema,
+} from '@/lib/validations/task';
 import { describe, expect, it } from 'vitest';
 
 describe('task validation schemas', () => {
@@ -15,8 +21,16 @@ describe('task validation schemas', () => {
   it('rejects invalid task creation payloads', () => {
     expect(() =>
       taskCreateSchema.parse({
-        title: 'Bad',
+        title: 'Valid title',
         body: 'too short',
+        completed: false,
+      })
+    ).toThrow();
+
+    expect(() =>
+      taskCreateSchema.parse({
+        title: 'Bad',
+        body: 'Long enough body text.',
         completed: false,
       })
     ).toThrow();
@@ -55,10 +69,69 @@ describe('task validation schemas', () => {
       taskUpdateSchema.parse({
         id: 'abc123',
         title: 'No',
-        body: 'short',
+        body: 'Long enough body text.',
         completed: false,
       })
     ).toThrow();
+
+    expect(() =>
+      taskUpdateSchema.parse({
+        id: 'abc123',
+        title: 'Valid title',
+        body: 'x'.repeat(101),
+        completed: false,
+      })
+    ).toThrow();
+  });
+
+  it('keeps an explicitly cleared description as an empty string on update', () => {
+    const parsed = taskUpdateSchema.parse({
+      id: 'abc123',
+      title: 'Valid title',
+      body: '',
+      completed: false,
+    });
+
+    expect(parsed.body).toBe('');
+  });
+
+  it('allows legacy descriptions shorter than 10 characters on update', () => {
+    const parsed = taskUpdateSchema.parse({
+      id: 'abc123',
+      title: 'Valid title',
+      body: 'short',
+      completed: false,
+    });
+
+    expect(parsed.body).toBe('short');
+    expect(() =>
+      taskUpdateSchema.parse({ id: 'abc123', title: 'Valid title', body: 'short', completed: false })
+    ).not.toThrow();
+  });
+
+  it('treats an omitted description as undefined on update', () => {
+    const parsed = taskUpdateSchema.parse({
+      id: 'abc123',
+      title: 'Valid title',
+      completed: true,
+    });
+
+    expect(parsed.body).toBeUndefined();
+  });
+
+  it('applies the same description rules on the edit form schema', () => {
+    expect(taskEditFormSchema.parse({ title: 'Valid title', body: '', completed: false }).body).toBe('');
+    expect(
+      taskEditFormSchema.parse({ title: 'Valid title', body: 'short', completed: false }).body
+    ).toBe('short');
+    expect(
+      taskEditFormSchema.parse({ title: 'Valid title', completed: true }).body
+    ).toBeUndefined();
+    expect(
+      taskEditFormSchema.safeParse({ title: 'Valid title', body: 'x'.repeat(101), completed: false })
+        .success
+    ).toBe(false);
+    expect(taskEditFormSchema.safeParse({ title: 'No', completed: false }).success).toBe(false);
   });
 
   it('passes valid delete payload', () => {

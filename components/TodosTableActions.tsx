@@ -3,6 +3,15 @@
 import { Trash } from 'lucide-react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
 import Spinner from './spinner';
 import { useState } from 'react';
 import EditTodoForm from './EditTodoForm';
@@ -17,16 +26,25 @@ interface IProps {
 
 const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
   const [loading, setLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const busy = loading || isPending;
 
-  const handleDelete = async () => {
+  const handleConfirmOpenChange = (open: boolean) => {
+    // Keep the dialog open while a deletion is in flight (ESC/overlay/X/Cancel
+    // all funnel through here) so the pending operation cannot be abandoned.
+    if (busy && !open) return;
+    setConfirmOpen(open);
+  };
+
+  const handleConfirmDelete = async () => {
     if (busy) return;
     setLoading(true);
     try {
       await onDelete(todo.id);
     } finally {
       setLoading(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -53,16 +71,43 @@ const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
         onCheckedChange={handleToggle}
       />
       <EditTodoForm todo={todo} />
-      <Button
-        size="icon"
-        variant="destructive"
-        className="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
-        disabled={busy}
-        onClick={handleDelete}
-        aria-label="Delete todo"
-      >
-        {loading ? <Spinner /> : <Trash size={16} />}
-      </Button>
+      <Dialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
+        <DialogTrigger asChild>
+          <Button
+            size="icon"
+            variant="destructive"
+            className="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
+            disabled={busy}
+            aria-label="Delete todo"
+          >
+            {loading ? <Spinner /> : <Trash size={16} />}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete todo?</DialogTitle>
+            <DialogDescription>This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={handleConfirmDelete}
+            >
+              {busy ? <Spinner /> : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

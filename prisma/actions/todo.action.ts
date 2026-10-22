@@ -67,7 +67,9 @@ export const updateTodoListAction = async (payload: unknown) => {
     },
     data: {
       title: validated.title,
-      body: validated.body,
+      // '' means the description was explicitly cleared -> persist null.
+      // undefined means the field was omitted -> Prisma leaves it unchanged.
+      body: validated.body === '' ? null : validated.body,
       completed: validated.completed,
     },
   });

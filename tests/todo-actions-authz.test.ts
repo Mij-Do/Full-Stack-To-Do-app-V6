@@ -122,6 +122,60 @@ describe('updateTodoListAction', () => {
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
   });
+
+  it('persists an explicitly cleared description as null', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      body: '',
+      completed: false,
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: { title: 'Valid title', body: null, completed: false },
+    });
+    expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  });
+
+  it('persists a changed description value', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      body: 'A brand new description value.',
+      completed: false,
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: { title: 'Valid title', body: 'A brand new description value.', completed: false },
+    });
+    expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  });
+
+  it('persists a legacy short description value unchanged', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      body: 'short',
+      completed: false,
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: { title: 'Valid title', body: 'short', completed: false },
+    });
+    expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  });
 });
 
 describe('toggleTodoListAction', () => {

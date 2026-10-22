@@ -6,7 +6,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from '@/components/ui/field';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { formSchema, TodoFormValues } from '@/schema';
+import { taskEditFormSchema } from '@/schema';
 import { updateTodoListAction } from '@/prisma/actions/todo.action';
 import { useState } from 'react';
 import Spinner from './spinner';
@@ -22,7 +22,7 @@ const EditTodoForm = ({ todo }: IProps) => {
   const [open, setOpen] = useState(false);
 
   const form = useForm({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(taskEditFormSchema),
     defaultValues: {
       title: todo.title,
       body: (todo.body as string) || '',
@@ -30,13 +30,13 @@ const EditTodoForm = ({ todo }: IProps) => {
     },
   });
 
-  const onSubmit = async (data: Parameters<typeof form.handleSubmit>[0] extends (values: infer T) => any ? T : unknown) => {
+  const onSubmit = async (data: ReturnType<typeof taskEditFormSchema.parse>) => {
     setLoading(true);
     try {
       await updateTodoListAction({
         id: todo.id,
         title: data.title,
-        body: data.body as string,
+        body: data.body,
         completed: data.completed,
       });
       setOpen(false);

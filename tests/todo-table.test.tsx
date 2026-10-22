@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event';
 import TodoTable from '@/components/todoTable';
 import AddTodoForm from '@/components/AddTodoForm';
 import { ITodos } from '@/interfaces';
-import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
+import {
+  deleteTodoListAction,
+  toggleTodoListAction,
+  updateTodoListAction,
+} from '@/prisma/actions/todo.action';
 
 vi.mock('@/prisma/actions/todo.action', () => ({
   createTodoListAction: vi.fn(),
@@ -77,6 +81,14 @@ describe('TodoTable component', () => {
     const user = userEvent.setup();
     await user.click(screen.getAllByLabelText('Delete todo')[0]);
 
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Delete todo?');
+    expect(dialog).toHaveTextContent('This action cannot be undone.');
+    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
     await waitFor(() => expect(screen.queryAllByText('First Todo')).toHaveLength(0));
     expect(deleteTodoListAction).toHaveBeenCalledWith({ id: '1' });
 
@@ -100,6 +112,8 @@ describe('TodoTable component', () => {
     render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
     await user.click(screen.getAllByLabelText('Delete todo')[0]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.queryAllByText('First Todo')).toHaveLength(0));
 
@@ -109,7 +123,66 @@ describe('TodoTable component', () => {
     expect(errorSpy).toHaveBeenCalledWith('Failed to delete todo', expect.any(Error));
     const logged = errorSpy.mock.calls.flat().join(' ');
     expect(logged).not.toContain('optimistic state update occurred outside');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveTextContent(/Failed to delete the task/);
     errorSpy.mockRestore();
+  });
+
+  it('opens a confirmation dialog on Delete without calling the action, and Cancel keeps the todo', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Delete todo')[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Delete todo?');
+    expect(dialog).toHaveTextContent('This action cannot be undone.');
+    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('dismisses the confirmation with Escape without deleting the todo', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Delete todo')[0]);
+    await screen.findByRole('dialog');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+  });
+
+  it('confirms deletion exactly once even when Delete is clicked repeatedly while pending', async () => {
+    const d = deferred();
+    vi.mocked(deleteTodoListAction).mockReturnValue(d.promise);
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Delete todo')[0]);
+    await screen.findByRole('dialog');
+
+    const confirmButton = screen.getByRole('button', { name: 'Delete' });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => expect(deleteTodoListAction).toHaveBeenCalledTimes(1));
+    expect(deleteTodoListAction).toHaveBeenCalledWith({ id: '1' });
+
+    d.resolve();
+
+    await waitFor(() => expect(screen.queryAllByText('First Todo')).toHaveLength(0));
   });
 
   it('toggles completion optimistically, exposes pending state, and blocks duplicate submissions', async () => {
@@ -437,6 +510,101 @@ describe('TodoTable component', () => {
 
     expect(await screen.findByText('Edit Title')).toBeInTheDocument();
     expect(screen.getByText('Edit Description')).toBeInTheDocument();
+  });
+
+  it('submits an explicitly cleared description as an empty string', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const descriptionField = await screen.findByLabelText('Edit Description');
+    expect(descriptionField).toHaveValue('First todo body content.');
+
+    await user.clear(descriptionField);
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: '1',
+      title: 'First Todo',
+      body: '',
+      completed: false,
+    });
+  });
+
+  it('keeps the description unchanged when only the title is edited', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    expect(await screen.findByText('Edit Title')).toBeInTheDocument();
+
+    const titleField = screen.getByLabelText('Edit Title');
+    await user.clear(titleField);
+    await user.type(titleField, 'Renamed Todo');
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: '1',
+      title: 'Renamed Todo',
+      body: 'First todo body content.',
+      completed: false,
+    });
+  });
+
+  it('persists a newly edited description value', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const descriptionField = await screen.findByLabelText('Edit Description');
+
+    await user.clear(descriptionField);
+    await user.type(descriptionField, 'A brand new description.');
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: '1',
+      title: 'First Todo',
+      body: 'A brand new description.',
+      completed: false,
+    });
+  });
+
+  it('allows editing and saving a legacy description shorter than 10 characters', async () => {
+    render(
+      <TodoTable
+        todos={[
+          {
+            id: 'legacy',
+            title: 'Legacy Todo',
+            body: 'short',
+            completed: false,
+            createdAt: new Date('2026-01-04T00:00:00.000Z'),
+          },
+        ]}
+      />
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    expect(await screen.findByText('Edit Description')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Description')).toHaveValue('short');
+
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: 'legacy',
+      title: 'Legacy Todo',
+      body: 'short',
+      completed: false,
+    });
+    expect(
+      screen.queryByText(/Body must be between 10 and 100 characters/)
+    ).not.toBeInTheDocument();
   });
 
   it('opens the add todo dialog with its form fields', async () => {
