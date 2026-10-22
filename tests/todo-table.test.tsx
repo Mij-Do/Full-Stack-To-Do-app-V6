@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TodoTable from '@/components/todoTable';
 import { ITodos } from '@/interfaces';
-import { deleteTodoListAction } from '@/prisma/actions/todo.action';
+import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
 
 vi.mock('@/prisma/actions/todo.action', () => ({
   deleteTodoListAction: vi.fn(),
@@ -26,6 +26,12 @@ const todos: ITodos[] = [
     title: 'First Todo',
     body: 'First todo body content.',
     completed: false,
+  },
+  {
+    id: '2',
+    title: 'Second Todo',
+    body: 'Second todo description.',
+    completed: true,
   },
 ];
 
@@ -89,5 +95,152 @@ describe('TodoTable component', () => {
     const logged = errorSpy.mock.calls.flat().join(' ');
     expect(logged).not.toContain('optimistic state update occurred outside');
     errorSpy.mockRestore();
+  });
+
+  it('toggles completion optimistically, exposes pending state, and blocks duplicate submissions', async () => {
+    const d = deferred();
+    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    const idleBox = screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0];
+    expect(idleBox).toHaveAttribute('aria-checked', 'false');
+    expect(idleBox).toHaveAttribute('aria-busy', 'false');
+    expect(idleBox).not.toBeDisabled();
+
+    await user.click(idleBox);
+
+    await waitFor(() => {
+      const pendingBoxes = screen.getAllByRole('checkbox', { name: 'Mark First Todo as active' });
+      expect(pendingBoxes.length).toBeGreaterThan(0);
+      pendingBoxes.forEach((box) => {
+        expect(box).toHaveAttribute('aria-checked', 'true');
+        expect(box).toHaveAttribute('aria-busy', 'true');
+        expect(box).toBeDisabled();
+      });
+    });
+
+    expect(toggleTodoListAction).toHaveBeenCalledTimes(1);
+    expect(toggleTodoListAction).toHaveBeenCalledWith({ id: '1', completed: true });
+
+    screen
+      .getAllByRole('checkbox', { name: 'Mark First Todo as active' })
+      .forEach((box) => fireEvent.click(box));
+    expect(toggleTodoListAction).toHaveBeenCalledTimes(1);
+
+    d.resolve();
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]
+      ).toHaveAttribute('aria-checked', 'false')
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('restores the previous state and shows a visible error when the toggle action fails', async () => {
+    const d = deferred();
+    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark First Todo as active' })[0]
+      ).toHaveAttribute('aria-checked', 'true')
+    );
+
+    d.reject(new Error('toggle failed'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveTextContent(/Failed to update the task status/);
+
+    await waitFor(() =>
+      screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' }).forEach((box) => {
+        expect(box).toHaveAttribute('aria-checked', 'false');
+        expect(box).not.toBeDisabled();
+      })
+    );
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update completion status', expect.any(Error));
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss error' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    errorSpy.mockRestore();
+  });
+
+  it('searches over title and description and updates results immediately', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    const searchbox = screen.getByRole('searchbox', { name: 'Search tasks' });
+
+    await user.type(searchbox, 'second');
+    expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('First Todo')).toHaveLength(0);
+    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+
+    await user.clear(searchbox);
+    await user.type(searchbox, 'body content');
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
+    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+
+    await user.clear(searchbox);
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
+  });
+
+  it('filters by status and composes filters with search', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    const activeButton = screen.getByRole('button', { name: 'Active' });
+    expect(activeButton).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(activeButton);
+    expect(activeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search tasks' }), 'second');
+    expect(screen.queryAllByText('First Todo')).toHaveLength(0);
+    expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
+    expect(screen.getByText('No tasks match your search and filter.')).toBeInTheDocument();
+    expect(screen.queryByText("You don't have any todos yet.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Showing 0 of 2 tasks/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear search and filters' }));
+    expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
+    expect(screen.queryByText('No tasks match your search and filter.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Completed' }));
+    expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('First Todo')).toHaveLength(0);
+    expect(screen.getByText(/Showing 1 of 2 tasks/)).toBeInTheDocument();
+  });
+
+  it('exposes accessible search and filter controls with documented counts', () => {
+    render(<TodoTable todos={todos} />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Filter tasks by status' })).toBeInTheDocument();
+    ['All', 'Active', 'Completed'].forEach((label) => {
+      expect(screen.getByRole('button', { name: label })).toHaveAttribute('aria-pressed');
+    });
+
+    expect(
+      screen.getByText('Showing 2 of 2 tasks · 1 active · 1 completed (all tasks)')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('2 of 2').length).toBeGreaterThanOrEqual(1);
   });
 });
