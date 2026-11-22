@@ -6,15 +6,16 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from '@/components/ui/field';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { formSchema, TodoFormValues } from '@/schema';
+import { formSchema, type TodoFormValues } from '@/schema';
 import { createTodoListAction } from '@/prisma/actions/todo.action';
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import Spinner from './spinner';
 import { TodoFormFields } from './TodoFormFields';
 
 const AddTodoForm = () => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -25,21 +26,34 @@ const AddTodoForm = () => {
     },
   });
 
-  const onSubmit = async (data: Parameters<typeof form.handleSubmit>[0] extends (values: infer T) => any ? T : unknown) => {
+  const onSubmit = async (data: TodoFormValues) => {
     setLoading(true);
     try {
       await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
       form.reset();
+      setSubmitError(null);
       setOpen(false);
     } catch (error) {
       console.error(error);
+      setSubmitError("Couldn't create the task. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    setSubmitError(null);
+    return form.handleSubmit(onSubmit)(event);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setSubmitError(null);
+        setOpen(nextOpen);
+      }}
+    >
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto">
           <Plus size={16} />
@@ -47,8 +61,27 @@ const AddTodoForm = () => {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleFormSubmit} className="space-y-4">
           <TodoFormFields control={form.control} titleId="add-title" descriptionId="add-description" />
+
+          {submitError && (
+            <div
+              role="alert"
+              className="flex items-start justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              <span>{submitError}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto shrink-0 px-2 py-1 text-destructive"
+                onClick={() => setSubmitError(null)}
+                aria-label="Dismiss error"
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
 
           <DialogFooter className="gap-2 sm:justify-end">
             <Field orientation="horizontal" className="flex-wrap justify-end gap-2">

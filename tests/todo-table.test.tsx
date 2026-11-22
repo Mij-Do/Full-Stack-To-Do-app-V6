@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TodoTable from '@/components/todoTable';
 import AddTodoForm from '@/components/AddTodoForm';
 import { ITodos } from '@/interfaces';
 import {
+  createTodoListAction,
   deleteTodoListAction,
   toggleTodoListAction,
   updateTodoListAction,
@@ -508,8 +509,128 @@ describe('TodoTable component', () => {
 
     await user.click(screen.getAllByLabelText('Edit todo')[0]);
 
-    expect(await screen.findByText('Edit Title')).toBeInTheDocument();
-    expect(screen.getByText('Edit Description')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Edit Title')).toHaveValue('First Todo');
+    expect(within(dialog).getByLabelText('Edit Description')).toHaveValue('First todo body content.');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('loads updated todo values when the edit dialog reopens', async () => {
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const updatedTodo = { ...todos[0], title: 'Updated First Todo', body: null, completed: true };
+    rerender(<TodoTable todos={[updatedTodo, ...todos.slice(1)]} />);
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Edit Title')).toHaveValue('Updated First Todo');
+    expect(within(dialog).getByLabelText('Edit Description')).toHaveValue('');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('loads an external completion-state update after reopening the edit dialog', async () => {
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const updatedTodo = { ...todos[0], completed: true };
+    rerender(<TodoTable todos={[updatedTodo, ...todos.slice(1)]} />);
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('preserves the editing draft when todo props change while the dialog is open', async () => {
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+    const descriptionField = within(dialog).getByLabelText('Edit Description');
+
+    await user.clear(titleField);
+    await user.type(titleField, 'First Todo draft');
+    await user.clear(descriptionField);
+    await user.type(descriptionField, 'Draft description value.');
+    await user.click(within(dialog).getByRole('checkbox'));
+
+    const updatedTodo = {
+      ...todos[0],
+      title: 'External Updated Todo',
+      body: 'External description value.',
+      completed: false,
+    };
+    rerender(<TodoTable todos={[updatedTodo, ...todos.slice(1)]} />);
+
+    expect(titleField).toHaveValue('First Todo draft');
+    expect(descriptionField).toHaveValue('Draft description value.');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('discards an abandoned draft and reloads current todo values after closing and reopening', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    let dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+
+    await user.clear(titleField);
+    await user.type(titleField, 'Abandoned draft');
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByLabelText('Edit Title')).toHaveValue('First Todo');
+    expect(within(dialog).getByLabelText('Edit Description')).toHaveValue('First todo body content.');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('resets to the latest todo values after reopening the edit dialog', async () => {
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const updatedTodo = {
+      ...todos[0],
+      title: 'Latest First Todo',
+      body: 'Latest todo description.',
+      completed: true,
+    };
+    rerender(<TodoTable todos={[updatedTodo, ...todos.slice(1)]} />);
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+    const descriptionField = within(dialog).getByLabelText('Edit Description');
+    await user.clear(titleField);
+    await user.type(titleField, 'Temporary title');
+    await user.clear(descriptionField);
+    await user.type(descriptionField, 'Temporary description.');
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(titleField).toHaveValue('Latest First Todo');
+    expect(descriptionField).toHaveValue('Latest todo description.');
+    expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('submits an explicitly cleared description as an empty string', async () => {
@@ -616,5 +737,200 @@ describe('TodoTable component', () => {
     expect(await screen.findByText('Title')).toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
+  });
+
+  it('shows a fixed create error, preserves values, clears loading, and allows dismissal', async () => {
+    const pending = deferred();
+    vi.mocked(createTodoListAction).mockReturnValueOnce(pending.promise);
+    const error = new Error('private server details');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Title');
+    const descriptionField = within(dialog).getByLabelText('Description');
+    const completedField = within(dialog).getByRole('checkbox');
+    const submitButton = within(dialog).getByRole('button', { name: 'Submit' });
+
+    await user.type(titleField, 'New Task Title');
+    await user.type(descriptionField, 'A useful task description.');
+    await user.click(completedField);
+    await user.click(submitButton);
+
+    expect(createTodoListAction).toHaveBeenCalledWith({
+      title: 'New Task Title',
+      body: 'A useful task description.',
+      completed: true,
+    });
+    expect(submitButton).toBeDisabled();
+    pending.reject(error);
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't create the task. Please try again.");
+    expect(alert).not.toHaveTextContent('private server details');
+    expect(titleField).toHaveValue('New Task Title');
+    expect(descriptionField).toHaveValue('A useful task description.');
+    expect(completedField).toHaveAttribute('aria-checked', 'true');
+    expect(submitButton).not.toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith(error);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Dismiss error' }));
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    errorSpy.mockRestore();
+  });
+
+  it('clears a create error when the dialog is reopened', async () => {
+    vi.mocked(createTodoListAction).mockRejectedValueOnce(new Error('private server details'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    let dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Title'), 'New Task Title');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "Couldn't create the task. Please try again."
+    );
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith(expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('closes the create dialog after success without showing an error', async () => {
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Title'), 'New Task Title');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(createTodoListAction).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('preserves create form validation and does not call the action for invalid values', async () => {
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    expect(within(dialog).getByText('Title must be at least 5 characters.')).toBeInTheDocument();
+    expect(createTodoListAction).not.toHaveBeenCalled();
+  });
+
+  it('shows a fixed edit error, preserves values, clears loading, and allows dismissal', async () => {
+    const pending = deferred();
+    vi.mocked(updateTodoListAction).mockReturnValueOnce(pending.promise);
+    const error = new Error('private server details');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+    const descriptionField = within(dialog).getByLabelText('Edit Description');
+    const completedField = within(dialog).getByRole('checkbox');
+    const submitButton = within(dialog).getByRole('button', { name: 'Submit' });
+
+    await user.clear(titleField);
+    await user.type(titleField, 'Updated First Todo');
+    await user.clear(descriptionField);
+    await user.type(descriptionField, 'Updated task description.');
+    await user.click(completedField);
+    await user.click(submitButton);
+
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: '1',
+      title: 'Updated First Todo',
+      body: 'Updated task description.',
+      completed: true,
+    });
+    expect(submitButton).toBeDisabled();
+    pending.reject(error);
+
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't save your changes. Please try again.");
+    expect(alert).not.toHaveTextContent('private server details');
+    expect(titleField).toHaveValue('Updated First Todo');
+    expect(descriptionField).toHaveValue('Updated task description.');
+    expect(completedField).toHaveAttribute('aria-checked', 'true');
+    expect(submitButton).not.toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update todo:', error);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Dismiss error' }));
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    errorSpy.mockRestore();
+  });
+
+  it('clears an edit error when the dialog is reopened', async () => {
+    vi.mocked(updateTodoListAction).mockRejectedValueOnce(new Error('private server details'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    let dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "Couldn't save your changes. Please try again."
+    );
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Edit Title')).toHaveValue('First Todo');
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update todo:', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('closes the edit dialog after success without showing an error', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+    await user.clear(titleField);
+    await user.type(titleField, 'Updated First Todo');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(updateTodoListAction).toHaveBeenCalledWith({
+      id: '1',
+      title: 'Updated First Todo',
+      body: 'First todo body content.',
+      completed: false,
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('preserves edit form validation and does not call the action for invalid values', async () => {
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const titleField = within(dialog).getByLabelText('Edit Title');
+    await user.clear(titleField);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    expect(within(dialog).getByText('Title must be at least 5 characters.')).toBeInTheDocument();
+    expect(updateTodoListAction).not.toHaveBeenCalled();
   });
 });
