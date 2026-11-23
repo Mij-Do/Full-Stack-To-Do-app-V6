@@ -39,11 +39,37 @@ describe('task validation schemas', () => {
       }).success
     ).toBe(true);
 
-    for (const dueDate of ['2026-02-30', '2025-02-29', '2026-13-01', '2026-1-01']) {
+    for (const dueDate of [
+      '0000-02-29',
+      '0000-01-01',
+      '2026-02-30',
+      '2025-02-29',
+      '2026-13-01',
+      '2026-1-01',
+    ]) {
       expect(
         taskCreateSchema.safeParse({ title: 'Write tests', completed: false, dueDate }).success
       ).toBe(false);
     }
+  });
+
+  it('rejects null due dates on create and update', () => {
+    expect(
+      taskCreateSchema.safeParse({
+        title: 'Write tests',
+        completed: false,
+        dueDate: null,
+      }).success
+    ).toBe(false);
+
+    expect(
+      taskUpdateSchema.safeParse({
+        id: 'abc123',
+        title: 'Updated title',
+        completed: false,
+        dueDate: null,
+      }).success
+    ).toBe(false);
   });
 
   it('rejects priority values outside the supported options', () => {
