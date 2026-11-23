@@ -11,21 +11,29 @@ import { createTodoListAction } from '@/prisma/actions/todo.action';
 import { type FormEvent, useState } from 'react';
 import Spinner from './spinner';
 import { TodoFormFields } from './TodoFormFields';
+import type { ITodoList } from '@/interfaces';
 
-const AddTodoForm = () => {
+interface AddTodoFormProps {
+  lists?: ITodoList[];
+  selectedListId?: string | null;
+}
+
+const AddTodoForm = ({ lists = [], selectedListId = null }: AddTodoFormProps) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const currentDefaultValues = {
+    title: '',
+    body: '',
+    completed: false,
+    dueDate: '',
+    priority: 'medium' as const,
+    listId: selectedListId ?? '',
+  };
 
   const form = useForm({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      title: '',
-      body: '',
-      completed: false,
-      dueDate: '',
-      priority: 'medium',
-    },
+    defaultValues: currentDefaultValues,
   });
 
   const onSubmit = async (data: TodoFormValues) => {
@@ -37,6 +45,7 @@ const AddTodoForm = () => {
         completed: data.completed,
         dueDate: data.dueDate,
         priority: data.priority,
+        listId: data.listId || null,
       });
       form.reset();
       setSubmitError(null);
@@ -59,6 +68,7 @@ const AddTodoForm = () => {
       open={open}
       onOpenChange={(nextOpen) => {
         if (nextOpen) setSubmitError(null);
+        if (nextOpen) form.reset(currentDefaultValues);
         setOpen(nextOpen);
       }}
     >
@@ -70,7 +80,12 @@ const AddTodoForm = () => {
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleFormSubmit} className="space-y-4">
-          <TodoFormFields control={form.control} titleId="add-title" descriptionId="add-description" />
+          <TodoFormFields
+            control={form.control}
+            lists={lists.filter((list) => !list.isArchived)}
+            titleId="add-title"
+            descriptionId="add-description"
+          />
 
           {submitError && (
             <div
@@ -98,7 +113,7 @@ const AddTodoForm = () => {
                   <X size={16} />
                 </Button>
               </DialogClose>
-              <Button type="button" variant="outline" onClick={() => form.reset()}>
+              <Button type="button" variant="outline" onClick={() => form.reset(currentDefaultValues)}>
                 Reset
               </Button>
               <Button type="submit" disabled={loading}>

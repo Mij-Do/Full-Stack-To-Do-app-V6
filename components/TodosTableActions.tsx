@@ -16,15 +16,17 @@ import Spinner from './spinner';
 import { useState } from 'react';
 import EditTodoForm from './EditTodoForm';
 import { ITodos } from '@/interfaces';
+import type { ITodoList } from '@/interfaces';
 
 interface IProps {
   todo: ITodos;
   onDelete: (id: string) => Promise<void>;
   onToggle: (todo: ITodos) => Promise<void>;
   isPending: boolean;
+  lists: ITodoList[];
 }
 
-const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
+const TodosTableActions = ({ todo, onDelete, onToggle, isPending, lists }: IProps) => {
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -70,7 +72,7 @@ const TodosTableActions = ({ todo, onDelete, onToggle, isPending }: IProps) => {
         }
         onCheckedChange={handleToggle}
       />
-      <EditTodoForm todo={todo} />
+      <EditTodoForm todo={todo} lists={lists} />
       <Dialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
         <DialogTrigger asChild>
           <Button

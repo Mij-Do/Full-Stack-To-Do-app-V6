@@ -13,12 +13,14 @@ import Spinner from './spinner';
 import { ITodos } from '@/interfaces';
 import { TodoFormFields } from './TodoFormFields';
 import { formatDateForInput } from '@/lib/utils';
+import type { ITodoList } from '@/interfaces';
 
 interface IProps {
   todo: ITodos;
+  lists?: ITodoList[];
 }
 
-const EditTodoForm = ({ todo }: IProps) => {
+const EditTodoForm = ({ todo, lists = [] }: IProps) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -28,7 +30,9 @@ const EditTodoForm = ({ todo }: IProps) => {
     completed: todo.completed,
     dueDate: formatDateForInput(todo.dueDate),
     priority: todo.priority ?? 'medium',
+    listId: todo.listId ?? '',
   };
+  const editableLists = lists.filter((list) => !list.isArchived || list.id === todo.listId);
 
   const form = useForm({
     resolver: zodResolver(taskEditFormSchema),
@@ -45,6 +49,7 @@ const EditTodoForm = ({ todo }: IProps) => {
         completed: data.completed,
         dueDate: data.dueDate,
         priority: data.priority,
+        listId: data.listId || null,
       });
       setSubmitError(null);
       setOpen(false);
@@ -81,6 +86,7 @@ const EditTodoForm = ({ todo }: IProps) => {
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <TodoFormFields
             control={form.control}
+            lists={editableLists}
             titleLabel="Edit Title"
             descriptionLabel="Edit Description"
             titleId="edit-title"

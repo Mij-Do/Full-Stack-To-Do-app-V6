@@ -1,13 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { authMock, revalidatePathMock, todoMock } = vi.hoisted(() => ({
+const { authMock, revalidatePathMock, todoMock, todoListMock, prismaMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   todoMock: {
     findMany: vi.fn(),
+    findFirst: vi.fn(),
     create: vi.fn(),
     updateMany: vi.fn(),
     deleteMany: vi.fn(),
+  },
+  todoListMock: {
+    findFirst: vi.fn(),
+    updateMany: vi.fn(),
+    create: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  prismaMock: {
+    $transaction: vi.fn(),
   },
 }));
 
@@ -20,7 +30,7 @@ vi.mock('next/cache', () => ({
 }));
 
 vi.mock('@/generated/prisma', () => ({
-  PrismaClient: vi.fn(() => ({ todo: todoMock })),
+  PrismaClient: vi.fn(() => ({ ...prismaMock, todo: todoMock, todoList: todoListMock })),
 }));
 
 import {
@@ -37,6 +47,11 @@ const signIn = (userId: string | null) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  prismaMock.$transaction.mockImplementation(async (
+    callback: (transaction: { todo: typeof todoMock; todoList: typeof todoListMock }) => unknown
+  ) =>
+    callback({ todo: todoMock, todoList: todoListMock })
+  );
 });
 
 describe('createTodoListAction', () => {
@@ -67,6 +82,7 @@ describe('createTodoListAction', () => {
         completed: false,
         dueDate: undefined,
         priority: 'medium',
+        listId: null,
         user_id: 'user_A',
       },
     });
@@ -89,9 +105,43 @@ describe('createTodoListAction', () => {
         completed: false,
         dueDate: new Date('2026-03-08T00:00:00.000Z'),
         priority: 'high',
+        listId: null,
         user_id: 'user_A',
       },
     });
+  });
+
+  it('creates a Todo in an owned active List', async () => {
+    signIn('user_A');
+    todoListMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await createTodoListAction({
+      title: 'List task',
+      completed: false,
+      listId: '0123456789abcdef01234567',
+    });
+
+    expect(todoListMock.updateMany).toHaveBeenCalledWith({
+      where: { id: '0123456789abcdef01234567', user_id: 'user_A', isArchived: false },
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(todoMock.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ listId: '0123456789abcdef01234567', user_id: 'user_A' }),
+    });
+  });
+
+  it('rejects assignment to unavailable Lists before creating a Todo', async () => {
+    signIn('user_A');
+    todoListMock.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      createTodoListAction({
+        title: 'List task',
+        completed: false,
+        listId: '0123456789abcdef01234567',
+      })
+    ).rejects.toThrow('List not found');
+    expect(todoMock.create).not.toHaveBeenCalled();
   });
 });
 
@@ -283,6 +333,84 @@ describe('updateTodoListAction', () => {
 
     expect(todoMock.updateMany).not.toHaveBeenCalled();
     expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it('moves an owned Todo to an active List after verifying both owners', async () => {
+    signIn('user_A');
+    todoMock.findFirst.mockResolvedValue({ listId: null });
+    todoListMock.findFirst.mockResolvedValue({ isArchived: false });
+    todoListMock.updateMany.mockResolvedValue({ count: 1 });
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      listId: '0123456789abcdef01234567',
+    });
+
+    expect(todoMock.findFirst).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      select: { listId: true },
+    });
+    expect(todoListMock.findFirst).toHaveBeenCalledWith({
+      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
+      select: { isArchived: true },
+    });
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: expect.objectContaining({ listId: '0123456789abcdef01234567' }),
+    });
+  });
+
+  it('moves a Todo back to the Inbox by explicitly setting listId to null', async () => {
+    signIn('user_A');
+    todoMock.findFirst.mockResolvedValue({ listId: '0123456789abcdef01234567' });
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      listId: null,
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: expect.objectContaining({ listId: null }),
+    });
+  });
+
+  it('rejects a foreign-owned or archived target List', async () => {
+    signIn('user_A');
+    todoMock.findFirst.mockResolvedValue({ listId: null });
+    todoListMock.findFirst.mockResolvedValue(null);
+
+    await expect(
+      updateTodoListAction({
+        id: 'todo_owned_by_A',
+        title: 'Valid title',
+        completed: false,
+        listId: '0123456789abcdef01234567',
+      })
+    ).rejects.toThrow('List not found');
+    expect(todoMock.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects moving an existing Todo into an archived List', async () => {
+    signIn('user_A');
+    todoMock.findFirst.mockResolvedValue({ listId: null });
+    todoListMock.findFirst.mockResolvedValue({ isArchived: true });
+
+    await expect(
+      updateTodoListAction({
+        id: 'todo_owned_by_A',
+        title: 'Valid title',
+        completed: false,
+        listId: '0123456789abcdef01234567',
+      })
+    ).rejects.toThrow('List not found');
+    expect(todoMock.updateMany).not.toHaveBeenCalled();
   });
 });
 

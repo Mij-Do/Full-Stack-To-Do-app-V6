@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const taskPrioritySchema = z.enum(['low', 'medium', 'high']);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
+export const todoListIdSchema = z.string().regex(/^[\da-f]{24}$/i, 'Invalid List ID.');
+
 const isValidDateOnly = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -57,14 +59,21 @@ export const taskUpdateBodySchema = z
 export const taskCreateSchema = taskBaseSchema.extend({
   dueDate: taskCreateDueDateSchema,
   priority: taskPrioritySchema.default('medium'),
+  listId: todoListIdSchema.nullable().optional(),
 });
 export const taskUpdateSchema = taskBaseSchema.extend({
   id: z.string(),
   body: taskUpdateBodySchema,
   dueDate: taskUpdateDueDateSchema,
   priority: taskPrioritySchema.optional(),
+  listId: todoListIdSchema.nullable().optional(),
 });
-export const taskEditFormSchema = taskUpdateSchema.omit({ id: true });
+const todoListFormIdSchema = z.union([todoListIdSchema, z.literal('')]).optional();
+
+export const taskEditFormSchema = taskUpdateSchema
+  .omit({ id: true })
+  .extend({ listId: todoListFormIdSchema });
+export const formSchema = taskCreateSchema.extend({ listId: todoListFormIdSchema });
 export const taskToggleSchema = z.object({
   id: z.string(),
   completed: z.boolean(),
@@ -73,10 +82,8 @@ export const taskIdSchema = z.object({
   id: z.string(),
 });
 
-export type TaskFormValues = z.infer<typeof taskCreateSchema>;
+export type TaskFormValues = z.infer<typeof formSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 export type TaskToggleInput = z.infer<typeof taskToggleSchema>;
 export type TaskDeleteInput = z.infer<typeof taskIdSchema>;
-
-export const formSchema = taskCreateSchema;

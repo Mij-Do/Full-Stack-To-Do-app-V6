@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ITodos } from '@/interfaces';
+import { ITodos, ITodoList } from '@/interfaces';
 import { Badge } from './ui/badge';
 import TodosTableActions from './TodosTableActions';
 import { formatDueDate, truncateDescription } from '@/lib/utils';
@@ -23,6 +23,8 @@ import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/tod
 
 interface IProps {
   todos: ITodos[];
+  lists?: ITodoList[];
+  emptyMessage?: string;
 }
 
 type TodoAction =
@@ -82,7 +84,11 @@ const sortByCreatedAt = (items: ITodos[], order: SortOrder): ITodos[] => {
   return [...dated.map(({ item }) => item), ...undated];
 };
 
-export default function TodoTable({ todos: initialTodos }: IProps) {
+export default function TodoTable({
+  todos: initialTodos,
+  lists = [],
+  emptyMessage = "You don't have any todos yet.",
+}: IProps) {
   const [todos, updateTodos] = useOptimistic<ITodos[], TodoAction>(initialTodos, (state, action) => {
     switch (action.type) {
       case 'delete':
@@ -230,7 +236,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
       <div className="w-full space-y-4">
         {errorBanner}
         <div className="w-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          You don&apos;t have any todos yet.
+          {emptyMessage}
         </div>
       </div>
     );
@@ -333,6 +339,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                 <div className="mt-4 flex justify-end border-t pt-3">
                   <TodosTableActions
                     todo={todo}
+                    lists={lists}
                     onDelete={handleDelete}
                     onToggle={handleToggle}
                     isPending={Boolean(pendingIds[todo.id])}
@@ -374,6 +381,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                     <TableCell className="text-right">
                       <TodosTableActions
                         todo={todo}
+                        lists={lists}
                         onDelete={handleDelete}
                         onToggle={handleToggle}
                         isPending={Boolean(pendingIds[todo.id])}

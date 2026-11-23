@@ -5,7 +5,9 @@ import {
   taskUpdateSchema,
   taskIdSchema,
   taskPrioritySchema,
+  todoListIdSchema,
 } from '@/lib/validations/task';
+import { listCreateSchema, listIdActionSchema, listRenameSchema } from '@/lib/validations/list';
 import { describe, expect, it } from 'vitest';
 
 describe('task validation schemas', () => {
@@ -17,6 +19,22 @@ describe('task validation schemas', () => {
     };
 
     expect(() => taskCreateSchema.parse(payload)).not.toThrow();
+  });
+
+  describe('List validation schemas', () => {
+    it('trims List names and enforces non-empty and maximum length', () => {
+      expect(listCreateSchema.parse({ name: '  Work  ' }).name).toBe('Work');
+      expect(listCreateSchema.safeParse({ name: '   ' }).success).toBe(false);
+      expect(listCreateSchema.safeParse({ name: 'a'.repeat(41) }).success).toBe(false);
+      expect(listRenameSchema.safeParse({ id: '0123456789abcdef01234567', name: 'Renamed' }).success)
+        .toBe(true);
+    });
+
+    it('rejects invalid List IDs in action payloads', () => {
+      expect(todoListIdSchema.safeParse('not-an-object-id').success).toBe(false);
+      expect(listIdActionSchema.safeParse({ id: 'not-an-object-id' }).success).toBe(false);
+      expect(listRenameSchema.safeParse({ id: 'not-an-object-id', name: 'Valid' }).success).toBe(false);
+    });
   });
 
   it('defaults creation priority to medium and treats an empty due date as absent', () => {

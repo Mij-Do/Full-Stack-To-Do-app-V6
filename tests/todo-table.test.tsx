@@ -869,6 +869,7 @@ describe('TodoTable component', () => {
       completed: false,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
   });
 
@@ -892,6 +893,7 @@ describe('TodoTable component', () => {
       completed: false,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
   });
 
@@ -914,6 +916,7 @@ describe('TodoTable component', () => {
       completed: false,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
   });
 
@@ -947,6 +950,7 @@ describe('TodoTable component', () => {
       completed: false,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
     expect(
       screen.queryByText(/Body must be between 10 and 100 characters/)
@@ -964,6 +968,69 @@ describe('TodoTable component', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(screen.getByLabelText('Due Date')).toHaveValue('');
     expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveValue('medium');
+  });
+
+  it('defaults creation in a selected List and allows moving an edited Todo to Inbox', async () => {
+    const list = {
+      id: '0123456789abcdef01234567',
+      name: 'Work',
+      isArchived: false,
+      todoCount: 1,
+    };
+    const user = userEvent.setup();
+
+    const { unmount } = render(<AddTodoForm lists={[list]} selectedListId={list.id} />);
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    let dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('combobox', { name: 'List' })).toHaveValue(list.id);
+    await user.type(within(dialog).getByLabelText('Title'), 'List task');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() =>
+      expect(createTodoListAction).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'List task', listId: list.id })
+      )
+    );
+
+    vi.clearAllMocks();
+    unmount();
+    render(<TodoTable todos={[{ ...todos[0], listId: list.id }]} lists={[list]} />);
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    dialog = await screen.findByRole('dialog');
+    const listField = within(dialog).getByRole('combobox', { name: 'List' });
+    expect(listField).toHaveValue(list.id);
+    await user.selectOptions(listField, '');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() =>
+      expect(updateTodoListAction).toHaveBeenCalledWith(
+        expect.objectContaining({ id: todos[0].id, listId: null })
+      )
+    );
+  });
+
+  it('does not offer archived Lists as new edit destinations', async () => {
+    const archivedListId = '0123456789abcdef01234567';
+    const otherArchivedListId = '1123456789abcdef01234567';
+    const lists = [
+      { id: archivedListId, name: 'Current archive', isArchived: true },
+      { id: otherArchivedListId, name: 'Other archive', isArchived: true },
+      { id: '2123456789abcdef01234567', name: 'Active', isArchived: false },
+    ];
+    const user = userEvent.setup();
+
+    render(
+      <TodoTable
+        todos={[{ ...todos[0], listId: archivedListId }]}
+        lists={lists}
+      />
+    );
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const listField = within(dialog).getByRole('combobox', { name: 'List' });
+
+    expect(within(listField).getByRole('option', { name: 'Current archive (Archived)' })).toBeInTheDocument();
+    expect(within(listField).queryByRole('option', { name: 'Other archive (Archived)' })).not.toBeInTheDocument();
+    expect(within(listField).getByRole('option', { name: 'Active' })).toBeInTheDocument();
   });
 
   it('submits date-only due dates and selected priorities from the add form', async () => {
@@ -984,6 +1051,7 @@ describe('TodoTable component', () => {
         completed: false,
         dueDate: '2026-03-08',
         priority: 'high',
+        listId: null,
       })
     );
   });
@@ -1016,6 +1084,7 @@ describe('TodoTable component', () => {
         completed: false,
         dueDate: '',
         priority: 'low',
+        listId: null,
       })
     );
   });
@@ -1046,6 +1115,7 @@ describe('TodoTable component', () => {
       completed: true,
       dueDate: undefined,
       priority: 'medium',
+      listId: null,
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -1143,6 +1213,7 @@ describe('TodoTable component', () => {
       completed: true,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -1204,6 +1275,7 @@ describe('TodoTable component', () => {
       completed: false,
       dueDate: '',
       priority: 'medium',
+      listId: null,
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

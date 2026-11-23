@@ -14,6 +14,18 @@ enum TaskPriority {
   high
 }
 
+model TodoList {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  name       String
+  user_id    String
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  todos      Todo[]
+
+  @@index([user_id, isArchived, createdAt])
+}
+
 model Todo {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   title     String
@@ -23,6 +35,9 @@ model Todo {
   createdAt DateTime @default(now())
   dueDate DateTime?
   priority TaskPriority? @default(medium)
+  listId    String?       @db.ObjectId
+  list      TodoList?     @relation(fields: [listId], references: [id])
 
   @@index([user_id, createdAt])
+  @@index([user_id, listId, createdAt])
 }

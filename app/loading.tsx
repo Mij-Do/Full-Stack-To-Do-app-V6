@@ -12,7 +12,12 @@ const SKELETON_ROWS = 5;
 
 export default function Loading() {
     return (
-        <div className="w-full space-y-4">
+        <div className="mx-auto w-full max-w-5xl space-y-4">
+            <div className="space-y-2 rounded-xl border p-4">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-2/3" />
+            </div>
             {/* 1. Mobile View Skeleton */}
             <div className="grid grid-cols-1 gap-4 md:hidden">
                 {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
