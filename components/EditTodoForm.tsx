@@ -7,32 +7,29 @@ import { Field } from '@/components/ui/field';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { taskEditFormSchema } from '@/schema';
-import { updateTodoListAction } from '@/prisma/actions/todo.action';
+import { updateTodoAction } from '@/prisma/actions/todo.action';
 import { type FormEvent, useState } from 'react';
 import Spinner from './spinner';
 import { ITodos } from '@/interfaces';
 import { TodoFormFields } from './TodoFormFields';
 import { formatDateForInput } from '@/lib/utils';
-import type { ITodoList } from '@/interfaces';
 
 interface IProps {
   todo: ITodos;
-  lists?: ITodoList[];
 }
 
-const EditTodoForm = ({ todo, lists = [] }: IProps) => {
+const EditTodoForm = ({ todo }: IProps) => {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [completionIntent, setCompletionIntent] = useState(false);
   const currentTodoValues = {
     title: todo.title,
     body: todo.body ?? '',
     completed: todo.completed,
     dueDate: formatDateForInput(todo.dueDate),
     priority: todo.priority ?? 'medium',
-    listId: todo.listId ?? '',
   };
-  const editableLists = lists.filter((list) => !list.isArchived || list.id === todo.listId);
 
   const form = useForm({
     resolver: zodResolver(taskEditFormSchema),
@@ -42,14 +39,14 @@ const EditTodoForm = ({ todo, lists = [] }: IProps) => {
   const onSubmit = async (data: ReturnType<typeof taskEditFormSchema.parse>) => {
     setLoading(true);
     try {
-      await updateTodoListAction({
+      await updateTodoAction({
         id: todo.id,
         title: data.title,
         body: data.body,
         completed: data.completed,
+        completionIntent: completionIntent ? 'set' : 'preserve',
         dueDate: data.dueDate,
         priority: data.priority,
-        listId: data.listId || null,
       });
       setSubmitError(null);
       setOpen(false);
@@ -72,6 +69,7 @@ const EditTodoForm = ({ todo, lists = [] }: IProps) => {
       onOpenChange={(nextOpen) => {
         if (nextOpen) {
           setSubmitError(null);
+          setCompletionIntent(false);
           form.reset(currentTodoValues);
         }
         setOpen(nextOpen);
@@ -86,12 +84,12 @@ const EditTodoForm = ({ todo, lists = [] }: IProps) => {
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <TodoFormFields
             control={form.control}
-            lists={editableLists}
             titleLabel="Edit Title"
             descriptionLabel="Edit Description"
             titleId="edit-title"
             descriptionId="edit-description"
             completedId="edit-completed"
+            onCompletedChange={() => setCompletionIntent(true)}
           />
 
           {submitError && (
@@ -120,7 +118,7 @@ const EditTodoForm = ({ todo, lists = [] }: IProps) => {
                   <X size={16} />
                 </Button>
               </DialogClose>
-              <Button type="button" variant="outline" onClick={() => form.reset(currentTodoValues)}>
+              <Button type="button" variant="outline" onClick={() => { setCompletionIntent(false); form.reset(currentTodoValues); }}>
                 Reset
               </Button>
               <Button type="submit" disabled={loading}>

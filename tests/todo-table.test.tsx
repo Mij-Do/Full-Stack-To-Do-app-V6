@@ -5,17 +5,21 @@ import TodoTable from '@/components/todoTable';
 import AddTodoForm from '@/components/AddTodoForm';
 import { ITodos } from '@/interfaces';
 import {
-  createTodoListAction,
-  deleteTodoListAction,
-  toggleTodoListAction,
-  updateTodoListAction,
+  createTodoAction,
+  deleteTodoAction,
+  toggleTodoAction,
+  updateTodoAction,
 } from '@/prisma/actions/todo.action';
 
 vi.mock('@/prisma/actions/todo.action', () => ({
-  createTodoListAction: vi.fn(),
-  deleteTodoListAction: vi.fn(),
-  toggleTodoListAction: vi.fn(),
-  updateTodoListAction: vi.fn(),
+  createTodoAction: vi.fn(),
+  deleteTodoAction: vi.fn(),
+  toggleTodoAction: vi.fn(),
+  updateTodoAction: vi.fn(),
+  createSubtaskAction: vi.fn(),
+  deleteSubtaskAction: vi.fn(),
+  toggleSubtaskAction: vi.fn(),
+  updateSubtaskAction: vi.fn(),
 }));
 
 function deferred<T = void>() {
@@ -68,6 +72,18 @@ describe('TodoTable component', () => {
     expect(bodies.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('renders a Todo with Subtasks as a parent checklist with visible progress', () => {
+    render(<TodoTable todos={[{
+      ...todos[0],
+      todoType: 'withSubtasks',
+      subtasks: [{ id: 'child', todoId: '1', title: 'Draft outline', completed: false, createdAt: new Date() }],
+    }]} />);
+    expect(screen.getAllByText('Todo with Subtasks').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('heading', { name: 'Subtasks' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('progressbar', { name: 'Subtask completion' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('checkbox', { name: 'Complete Draft outline' }).length).toBeGreaterThan(0);
+  });
+
   it('renders no todos message when list is empty', () => {
     render(<TodoTable todos={[]} />);
     expect(screen.getByText("You don't have any todos yet.")).toBeInTheDocument();
@@ -75,7 +91,7 @@ describe('TodoTable component', () => {
 
   it('removes the row optimistically and disables the button while delete is pending, without the outside-transition warning', async () => {
     const d = deferred();
-    vi.mocked(deleteTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(deleteTodoAction).mockReturnValue(d.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -85,13 +101,13 @@ describe('TodoTable component', () => {
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Delete todo?');
     expect(dialog).toHaveTextContent('This action cannot be undone.');
-    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(deleteTodoAction).not.toHaveBeenCalled();
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.queryAllByText('First Todo')).toHaveLength(0));
-    expect(deleteTodoListAction).toHaveBeenCalledWith({ id: '1' });
+    expect(deleteTodoAction).toHaveBeenCalledWith({ id: '1' });
 
     const logged = errorSpy.mock.calls.flat().join(' ');
     expect(logged).not.toContain('optimistic state update occurred outside');
@@ -107,7 +123,7 @@ describe('TodoTable component', () => {
 
   it('restores the row when the delete action fails', async () => {
     const d = deferred();
-    vi.mocked(deleteTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(deleteTodoAction).mockReturnValue(d.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -139,13 +155,13 @@ describe('TodoTable component', () => {
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Delete todo?');
     expect(dialog).toHaveTextContent('This action cannot be undone.');
-    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(deleteTodoAction).not.toHaveBeenCalled();
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(deleteTodoAction).not.toHaveBeenCalled();
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -160,13 +176,13 @@ describe('TodoTable component', () => {
     await user.keyboard('{Escape}');
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(deleteTodoListAction).not.toHaveBeenCalled();
+    expect(deleteTodoAction).not.toHaveBeenCalled();
     expect(screen.getAllByText('First Todo').length).toBeGreaterThan(0);
   });
 
   it('confirms deletion exactly once even when Delete is clicked repeatedly while pending', async () => {
     const d = deferred();
-    vi.mocked(deleteTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(deleteTodoAction).mockReturnValue(d.promise);
 
     render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
@@ -178,8 +194,8 @@ describe('TodoTable component', () => {
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
-    await waitFor(() => expect(deleteTodoListAction).toHaveBeenCalledTimes(1));
-    expect(deleteTodoListAction).toHaveBeenCalledWith({ id: '1' });
+    await waitFor(() => expect(deleteTodoAction).toHaveBeenCalledTimes(1));
+    expect(deleteTodoAction).toHaveBeenCalledWith({ id: '1' });
 
     d.resolve();
 
@@ -188,7 +204,7 @@ describe('TodoTable component', () => {
 
   it('toggles completion optimistically, exposes pending state, and blocks duplicate submissions', async () => {
     const d = deferred();
-    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(toggleTodoAction).mockReturnValue(d.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -211,13 +227,13 @@ describe('TodoTable component', () => {
       });
     });
 
-    expect(toggleTodoListAction).toHaveBeenCalledTimes(1);
-    expect(toggleTodoListAction).toHaveBeenCalledWith({ id: '1', completed: true });
+    expect(toggleTodoAction).toHaveBeenCalledTimes(1);
+    expect(toggleTodoAction).toHaveBeenCalledWith({ id: '1', completed: true });
 
     screen
       .getAllByRole('checkbox', { name: 'Mark First Todo as active' })
       .forEach((box) => fireEvent.click(box));
-    expect(toggleTodoListAction).toHaveBeenCalledTimes(1);
+    expect(toggleTodoAction).toHaveBeenCalledTimes(1);
 
     d.resolve();
 
@@ -233,7 +249,7 @@ describe('TodoTable component', () => {
 
   it('restores the previous state and shows a visible error when the toggle action fails', async () => {
     const d = deferred();
-    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(toggleTodoAction).mockReturnValue(d.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -267,8 +283,8 @@ describe('TodoTable component', () => {
   it('keeps another todo toggled when a concurrent delete fails', async () => {
     const toggle = deferred();
     const deletion = deferred();
-    vi.mocked(toggleTodoListAction).mockReturnValueOnce(toggle.promise);
-    vi.mocked(deleteTodoListAction).mockReturnValueOnce(deletion.promise);
+    vi.mocked(toggleTodoAction).mockReturnValueOnce(toggle.promise);
+    vi.mocked(deleteTodoAction).mockReturnValueOnce(deletion.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -321,7 +337,7 @@ describe('TodoTable component', () => {
   it('keeps another todo toggled when a concurrent toggle fails', async () => {
     const firstToggle = deferred();
     const secondToggle = deferred();
-    vi.mocked(toggleTodoListAction)
+    vi.mocked(toggleTodoAction)
       .mockReturnValueOnce(firstToggle.promise)
       .mockReturnValueOnce(secondToggle.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -377,8 +393,8 @@ describe('TodoTable component', () => {
   it('does not resurrect a successfully deleted todo when another toggle fails', async () => {
     const toggle = deferred();
     const deletion = deferred();
-    vi.mocked(toggleTodoListAction).mockReturnValueOnce(toggle.promise);
-    vi.mocked(deleteTodoListAction).mockReturnValueOnce(deletion.promise);
+    vi.mocked(toggleTodoAction).mockReturnValueOnce(toggle.promise);
+    vi.mocked(deleteTodoAction).mockReturnValueOnce(deletion.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { rerender } = render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
@@ -411,7 +427,7 @@ describe('TodoTable component', () => {
   it('does not overwrite a successful toggle when another toggle fails', async () => {
     const firstToggle = deferred();
     const secondToggle = deferred();
-    vi.mocked(toggleTodoListAction)
+    vi.mocked(toggleTodoAction)
       .mockReturnValueOnce(firstToggle.promise)
       .mockReturnValueOnce(secondToggle.promise);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -603,7 +619,7 @@ describe('TodoTable component', () => {
 
   it('keeps filter and sort selections while an optimistic action updates the list', async () => {
     const d = deferred();
-    vi.mocked(toggleTodoListAction).mockReturnValue(d.promise);
+    vi.mocked(toggleTodoAction).mockReturnValue(d.promise);
 
     render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
@@ -861,15 +877,15 @@ describe('TodoTable component', () => {
     await user.clear(descriptionField);
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    await waitFor(() => expect(updateTodoAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: '1',
       title: 'First Todo',
       body: '',
       completed: false,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'preserve',
     });
   });
 
@@ -885,15 +901,15 @@ describe('TodoTable component', () => {
     await user.type(titleField, 'Renamed Todo');
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    await waitFor(() => expect(updateTodoAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: '1',
       title: 'Renamed Todo',
       body: 'First todo body content.',
       completed: false,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'preserve',
     });
   });
 
@@ -908,15 +924,15 @@ describe('TodoTable component', () => {
     await user.type(descriptionField, 'A brand new description.');
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    await waitFor(() => expect(updateTodoAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: '1',
       title: 'First Todo',
       body: 'A brand new description.',
       completed: false,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'preserve',
     });
   });
 
@@ -942,15 +958,15 @@ describe('TodoTable component', () => {
 
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(updateTodoListAction).toHaveBeenCalledTimes(1));
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    await waitFor(() => expect(updateTodoAction).toHaveBeenCalledTimes(1));
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: 'legacy',
       title: 'Legacy Todo',
       body: 'short',
       completed: false,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'preserve',
     });
     expect(
       screen.queryByText(/Body must be between 10 and 100 characters/)
@@ -971,67 +987,26 @@ describe('TodoTable component', () => {
     expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveValue('medium');
   });
 
-  it('defaults creation in a selected List and allows moving an edited Todo to Inbox', async () => {
-    const list = {
-      id: '0123456789abcdef01234567',
-      name: 'Work',
-      isArchived: false,
-      todoCount: 1,
-    };
+  it('creates a Todo with initial subtasks only when that explicit type is selected', async () => {
+    render(<AddTodoForm />);
     const user = userEvent.setup();
-
-    const { unmount } = render(<AddTodoForm lists={[list]} selectedListId={list.id} />);
     await user.click(screen.getByRole('button', { name: /New ToDo/ }));
-    let dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('combobox', { name: 'List' })).toHaveValue(list.id);
-    await user.type(within(dialog).getByLabelText('Title'), 'List task');
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-    await waitFor(() =>
-      expect(createTodoListAction).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'List task', listId: list.id })
-      )
-    );
-
-    vi.clearAllMocks();
-    unmount();
-    render(<TodoTable todos={[{ ...todos[0], listId: list.id }]} lists={[list]} />);
-    await user.click(screen.getAllByLabelText('Edit todo')[0]);
-    dialog = await screen.findByRole('dialog');
-    const listField = within(dialog).getByRole('combobox', { name: 'List' });
-    expect(listField).toHaveValue(list.id);
-    await user.selectOptions(listField, '');
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-
-    await waitFor(() =>
-      expect(updateTodoListAction).toHaveBeenCalledWith(
-        expect.objectContaining({ id: todos[0].id, listId: null })
-      )
-    );
-  });
-
-  it('does not offer archived Lists as new edit destinations', async () => {
-    const archivedListId = '0123456789abcdef01234567';
-    const otherArchivedListId = '1123456789abcdef01234567';
-    const lists = [
-      { id: archivedListId, name: 'Current archive', isArchived: true },
-      { id: otherArchivedListId, name: 'Other archive', isArchived: true },
-      { id: '2123456789abcdef01234567', name: 'Active', isArchived: false },
-    ];
-    const user = userEvent.setup();
-
-    render(
-      <TodoTable
-        todos={[{ ...todos[0], listId: archivedListId }]}
-        lists={lists}
-      />
-    );
-    await user.click(screen.getAllByLabelText('Edit todo')[0]);
     const dialog = await screen.findByRole('dialog');
-    const listField = within(dialog).getByRole('combobox', { name: 'List' });
+    await user.click(within(dialog).getByRole('radio', { name: 'Todo with Subtasks' }));
+    await user.type(within(dialog).getByLabelText('Title'), 'Checklist Todo');
+    const completed = within(dialog).getByRole('checkbox', { name: 'Completed' });
+    await user.click(completed);
+    await user.type(within(dialog).getByRole('textbox', { name: 'New subtask title' }), 'Plan review');
+    await user.click(within(dialog).getByRole('button', { name: 'Add subtask' }));
+    expect(completed).not.toBeChecked();
+    expect(completed).toBeDisabled();
+    await user.clear(within(dialog).getByRole('textbox', { name: 'Subtask 1' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Subtask 1' }), 'Plan final review');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
-    expect(within(listField).getByRole('option', { name: 'Current archive (Archived)' })).toBeInTheDocument();
-    expect(within(listField).queryByRole('option', { name: 'Other archive (Archived)' })).not.toBeInTheDocument();
-    expect(within(listField).getByRole('option', { name: 'Active' })).toBeInTheDocument();
+    await waitFor(() => expect(createTodoAction).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Checklist Todo', todoType: 'withSubtasks', initialSubtasks: ['Plan final review'],
+    })));
   });
 
   it('submits date-only due dates and selected priorities from the add form', async () => {
@@ -1046,13 +1021,14 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     await waitFor(() =>
-      expect(createTodoListAction).toHaveBeenCalledWith({
+      expect(createTodoAction).toHaveBeenCalledWith({
         title: 'Date Task',
         body: undefined,
         completed: false,
         dueDate: '2026-03-08',
         priority: 'high',
-        listId: null,
+        todoType: 'standalone',
+        initialSubtasks: [],
       })
     );
   });
@@ -1078,21 +1054,21 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     await waitFor(() =>
-      expect(updateTodoListAction).toHaveBeenCalledWith({
+      expect(updateTodoAction).toHaveBeenCalledWith({
         id: '1',
         title: 'First Todo',
         body: 'First todo body content.',
         completed: false,
         dueDate: '',
         priority: 'low',
-        listId: null,
+        completionIntent: 'preserve',
       })
     );
   });
 
   it('shows a fixed create error, preserves values, clears loading, and allows dismissal', async () => {
     const pending = deferred();
-    vi.mocked(createTodoListAction).mockReturnValueOnce(pending.promise);
+    vi.mocked(createTodoAction).mockReturnValueOnce(pending.promise);
     const error = new Error('private server details');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -1110,13 +1086,14 @@ describe('TodoTable component', () => {
     await user.click(completedField);
     await user.click(submitButton);
 
-    expect(createTodoListAction).toHaveBeenCalledWith({
+    expect(createTodoAction).toHaveBeenCalledWith({
       title: 'New Task Title',
       body: 'A useful task description.',
       completed: true,
       dueDate: undefined,
       priority: 'medium',
-      listId: null,
+      todoType: 'standalone',
+      initialSubtasks: [],
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -1137,7 +1114,7 @@ describe('TodoTable component', () => {
   });
 
   it('clears a create error when the dialog is reopened', async () => {
-    vi.mocked(createTodoListAction).mockRejectedValueOnce(new Error('private server details'));
+    vi.mocked(createTodoAction).mockRejectedValueOnce(new Error('private server details'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<AddTodoForm />);
@@ -1169,7 +1146,7 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(createTodoListAction).toHaveBeenCalledTimes(1);
+    expect(createTodoAction).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -1182,12 +1159,12 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     expect(within(dialog).getByText('Title must be at least 5 characters.')).toBeInTheDocument();
-    expect(createTodoListAction).not.toHaveBeenCalled();
+    expect(createTodoAction).not.toHaveBeenCalled();
   });
 
   it('shows a fixed edit error, preserves values, clears loading, and allows dismissal', async () => {
     const pending = deferred();
-    vi.mocked(updateTodoListAction).mockReturnValueOnce(pending.promise);
+    vi.mocked(updateTodoAction).mockReturnValueOnce(pending.promise);
     const error = new Error('private server details');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -1207,14 +1184,14 @@ describe('TodoTable component', () => {
     await user.click(completedField);
     await user.click(submitButton);
 
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: '1',
       title: 'Updated First Todo',
       body: 'Updated task description.',
       completed: true,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'set',
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -1235,7 +1212,7 @@ describe('TodoTable component', () => {
   });
 
   it('clears an edit error when the dialog is reopened', async () => {
-    vi.mocked(updateTodoListAction).mockRejectedValueOnce(new Error('private server details'));
+    vi.mocked(updateTodoAction).mockRejectedValueOnce(new Error('private server details'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
@@ -1269,14 +1246,14 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(updateTodoListAction).toHaveBeenCalledWith({
+    expect(updateTodoAction).toHaveBeenCalledWith({
       id: '1',
       title: 'Updated First Todo',
       body: 'First todo body content.',
       completed: false,
       dueDate: '',
       priority: 'medium',
-      listId: null,
+      completionIntent: 'preserve',
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -1291,6 +1268,6 @@ describe('TodoTable component', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
 
     expect(within(dialog).getByText('Title must be at least 5 characters.')).toBeInTheDocument();
-    expect(updateTodoListAction).not.toHaveBeenCalled();
+    expect(updateTodoAction).not.toHaveBeenCalled();
   });
 });

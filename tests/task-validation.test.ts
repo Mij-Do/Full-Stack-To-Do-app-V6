@@ -6,12 +6,25 @@ import {
   taskIdSchema,
   taskPrioritySchema,
   mongoObjectIdSchema,
-  todoListIdSchema,
 } from '@/lib/validations/task';
-import { listCreateSchema, listIdActionSchema, listRenameSchema } from '@/lib/validations/list';
+import { subtaskCreateSchema, subtaskUpdateSchema } from '@/lib/validations/subtask';
 import { describe, expect, it } from 'vitest';
 
 const todoId = '0123456789abcdef01234567';
+
+describe('subtask validation schemas', () => {
+  it('trims titles and accepts the 80-character boundary', () => {
+    expect(subtaskCreateSchema.parse({ todoId, title: '  step  ' }).title).toBe('step');
+    expect(subtaskCreateSchema.parse({ todoId, title: 'x'.repeat(80) }).title).toHaveLength(80);
+  });
+
+  it('rejects empty or overlong titles and malformed parent or subtask IDs', () => {
+    expect(subtaskCreateSchema.safeParse({ todoId, title: '   ' }).success).toBe(false);
+    expect(subtaskCreateSchema.safeParse({ todoId, title: 'x'.repeat(81) }).success).toBe(false);
+    expect(subtaskCreateSchema.safeParse({ todoId: 'bad', title: 'step' }).success).toBe(false);
+    expect(subtaskUpdateSchema.safeParse({ todoId, id: 'bad', title: 'step' }).success).toBe(false);
+  });
+});
 
 describe('task validation schemas', () => {
   it('passes valid task creation payload', () => {
@@ -24,20 +37,9 @@ describe('task validation schemas', () => {
     expect(() => taskCreateSchema.parse(payload)).not.toThrow();
   });
 
-  describe('List validation schemas', () => {
-    it('trims List names and enforces non-empty and maximum length', () => {
-      expect(listCreateSchema.parse({ name: '  Work  ' }).name).toBe('Work');
-      expect(listCreateSchema.safeParse({ name: '   ' }).success).toBe(false);
-      expect(listCreateSchema.safeParse({ name: 'a'.repeat(41) }).success).toBe(false);
-      expect(listRenameSchema.safeParse({ id: '0123456789abcdef01234567', name: 'Renamed' }).success)
-        .toBe(true);
-    });
-
-    it('rejects invalid List IDs in action payloads', () => {
-      expect(todoListIdSchema.safeParse('not-an-object-id').success).toBe(false);
-      expect(listIdActionSchema.safeParse({ id: 'not-an-object-id' }).success).toBe(false);
-      expect(listRenameSchema.safeParse({ id: 'not-an-object-id', name: 'Valid' }).success).toBe(false);
-    });
+  it('preserves an explicit Todo type and initial pending subtask titles', () => {
+    expect(taskCreateSchema.parse({ title: 'Parent Todo', completed: false, todoType: 'withSubtasks', initialSubtasks: [' Review draft '] }))
+      .toMatchObject({ todoType: 'withSubtasks', initialSubtasks: ['Review draft'] });
   });
 
   it('accepts valid MongoDB ObjectIds and rejects malformed values', () => {
@@ -155,6 +157,13 @@ describe('task validation schemas', () => {
     };
 
     expect(() => taskUpdateSchema.parse(payload)).not.toThrow();
+  });
+
+  it('defaults edit completion intent to preserve and accepts an explicit set intent', () => {
+    const ordinaryEdit = taskUpdateSchema.parse({ id: todoId, title: 'Updated title', completed: false });
+    expect(ordinaryEdit.completionIntent).toBe('preserve');
+    expect(taskUpdateSchema.parse({ id: todoId, title: 'Updated title', completed: true, completionIntent: 'set' }).completionIntent).toBe('set');
+    expect(taskUpdateSchema.safeParse({ id: todoId, title: 'Updated title', completed: true, completionIntent: 'toggle' }).success).toBe(false);
   });
 
   it('rejects invalid update payloads', () => {

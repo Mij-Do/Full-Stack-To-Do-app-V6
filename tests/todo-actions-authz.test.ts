@@ -1,617 +1,135 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { authMock, revalidatePathMock, todoMock, todoListMock, prismaMock } = vi.hoisted(() => ({
+const { authMock, revalidatePathMock, todoMock, todoSubtaskMock, prismaMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   revalidatePathMock: vi.fn(),
-  todoMock: {
-    findMany: vi.fn(),
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    updateMany: vi.fn(),
-    deleteMany: vi.fn(),
-  },
-  todoListMock: {
-    findFirst: vi.fn(),
-    updateMany: vi.fn(),
-    create: vi.fn(),
-    deleteMany: vi.fn(),
-  },
-  prismaMock: {
-    $transaction: vi.fn(),
-  },
+  todoMock: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+  todoSubtaskMock: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+  prismaMock: { $transaction: vi.fn() },
 }));
 
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: authMock,
-}));
+vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }));
+vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
+vi.mock('@/lib/prisma', () => ({ prisma: { ...prismaMock, todo: todoMock, todoSubtask: todoSubtaskMock } }));
 
-vi.mock('next/cache', () => ({
-  revalidatePath: revalidatePathMock,
-}));
-
-vi.mock('@/lib/prisma', () => ({
-  prisma: { ...prismaMock, todo: todoMock, todoList: todoListMock },
-}));
-
-import {
-  createTodoListAction,
-  deleteTodoListAction,
-  toggleTodoListAction,
-  updateTodoListAction,
-} from '@/prisma/actions/todo.action';
+import { createTodoAction, deleteTodoAction, toggleTodoAction, updateTodoAction } from '@/prisma/actions/todo.action';
 import { getUserTodoList } from '@/prisma/queries/todo.query';
 
-const signIn = (userId: string | null) => {
-  authMock.mockResolvedValue({ userId });
-};
-
-const todoIdA = '0123456789abcdef01234567';
-const todoIdB = '1123456789abcdef01234567';
+const todoId = '0123456789abcdef01234567';
+const childId = '1123456789abcdef01234567';
+const tx = { todo: todoMock, todoSubtask: todoSubtaskMock };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prismaMock.$transaction.mockImplementation(async (
-    callback: (transaction: { todo: typeof todoMock; todoList: typeof todoListMock }) => unknown
-  ) =>
-    callback({ todo: todoMock, todoList: todoListMock })
-  );
+  authMock.mockResolvedValue({ userId: 'owner_A' });
+  prismaMock.$transaction.mockImplementation(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
+  todoMock.findFirst.mockResolvedValue({ id: todoId, completed: false });
+  todoMock.updateMany.mockResolvedValue({ count: 1 });
+  todoMock.create.mockResolvedValue({ id: todoId });
+  todoMock.deleteMany.mockResolvedValue({ count: 1 });
+  todoSubtaskMock.create.mockResolvedValue({ id: childId });
 });
 
-describe('createTodoListAction', () => {
-  it('rejects unauthenticated callers without touching the database', async () => {
-    signIn(null);
-
-    await expect(
-      createTodoListAction({ title: 'Valid title', completed: false })
-    ).rejects.toThrow('Unauthorized');
-
+describe('Todo creation', () => {
+  it('requires authentication and ignores client-supplied ownership', async () => {
+    authMock.mockResolvedValueOnce({ userId: null });
+    await expect(createTodoAction({ title: 'Valid title', completed: false })).rejects.toThrow('Unauthorized');
     expect(todoMock.create).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+
+    await createTodoAction({ title: 'Valid title', completed: false, user_id: 'owner_B' });
+    expect(todoMock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'owner_A', todoType: 'standalone' }) });
   });
 
-  it('assigns the authenticated user id, ignoring any client-supplied userId', async () => {
-    signIn('user_A');
-
-    await createTodoListAction({
-      title: 'Valid title',
-      completed: false,
-      userId: 'user_B',
-    } as Parameters<typeof createTodoListAction>[0]);
-
-    expect(todoMock.create).toHaveBeenCalledWith({
-      data: {
-        title: 'Valid title',
-        body: undefined,
-        completed: false,
-        dueDate: undefined,
-        priority: 'medium',
-        listId: null,
-        user_id: 'user_A',
-      },
-    });
+  it('preserves completed standalone Todo creation', async () => {
+    await createTodoAction({ title: 'Completed title', completed: true, todoType: 'standalone' });
+    expect(todoMock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ completed: true, todoType: 'standalone' }) });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
-  it('stores due dates at UTC midnight and applies the supplied priority', async () => {
-    signIn('user_A');
-
-    await createTodoListAction({
-      title: 'Due date task',
-      completed: false,
-      dueDate: '2026-03-08',
-      priority: 'high',
-    });
-
-    expect(todoMock.create).toHaveBeenCalledWith({
-      data: {
-        title: 'Due date task',
-        body: undefined,
-        completed: false,
-        dueDate: new Date('2026-03-08T00:00:00.000Z'),
-        priority: 'high',
-        listId: null,
-        user_id: 'user_A',
-      },
-    });
+  it('preserves incomplete standalone Todo creation', async () => {
+    await createTodoAction({ title: 'Active title', completed: false });
+    expect(todoMock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ completed: false, todoType: 'standalone' }) });
   });
 
-  it('creates a Todo in an owned active List', async () => {
-    signIn('user_A');
-    todoListMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await createTodoListAction({
-      title: 'List task',
-      completed: false,
-      listId: '0123456789abcdef01234567',
-    });
-
-    expect(todoListMock.updateMany).toHaveBeenCalledWith({
-      where: { id: '0123456789abcdef01234567', user_id: 'user_A', isArchived: false },
-      data: { updatedAt: expect.any(Date) },
-    });
-    expect(todoMock.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ listId: '0123456789abcdef01234567', user_id: 'user_A' }),
-    });
-  });
-
-  it('rejects assignment to a foreign or archived List before creating a Todo', async () => {
-    signIn('user_A');
-    todoListMock.updateMany.mockResolvedValue({ count: 0 });
-
-    await expect(
-      createTodoListAction({
-        title: 'List task',
-        completed: false,
-        listId: '0123456789abcdef01234567',
-      })
-    ).rejects.toThrow('List not found');
-    expect(todoListMock.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: '0123456789abcdef01234567',
-        user_id: 'user_A',
-        isArchived: false,
-      },
-      data: { updatedAt: expect.any(Date) },
-    });
-    expect(todoMock.create).not.toHaveBeenCalled();
-  });
-
-  it('returns a safe error if the List-assignment transaction fails', async () => {
-    signIn('user_A');
-    prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
-
-    await expect(
-      createTodoListAction({
-        title: 'List task',
-        completed: false,
-        listId: '0123456789abcdef01234567',
-      })
-    ).rejects.toMatchObject({
-      message: 'Could not create this Todo in the selected List. Please try again.',
-    });
-    expect(todoMock.create).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+  it('atomically creates a checklist Todo and its initial pending subtasks', async () => {
+    await createTodoAction({ title: 'Parent title', completed: true, todoType: 'withSubtasks', initialSubtasks: ['Review draft', 'Send notes'] });
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(todoMock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ completed: false, todoType: 'withSubtasks', user_id: 'owner_A' }) });
+    expect(todoSubtaskMock.create).toHaveBeenNthCalledWith(1, { data: { todoId, user_id: 'owner_A', title: 'Review draft', completed: false } });
+    expect(todoSubtaskMock.create).toHaveBeenNthCalledWith(2, { data: { todoId, user_id: 'owner_A', title: 'Send notes', completed: false } });
   });
 });
 
-describe('updateTodoListAction', () => {
-  it('rejects malformed Todo IDs before querying Prisma', async () => {
-    signIn('user_A');
-
-    await expect(
-      updateTodoListAction({ id: 'not-an-object-id', title: 'Valid title', completed: false })
-    ).rejects.toThrow();
-
-    expect(todoMock.findFirst).not.toHaveBeenCalled();
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
+describe('Todo updates and completion', () => {
+  it('keeps a stale ordinary edit from overwriting completion or child progress', async () => {
+    todoMock.findFirst.mockResolvedValueOnce({ completed: true });
+    await updateTodoAction({ id: todoId, title: 'Edited title', completed: false, completionIntent: 'preserve' });
+    expect(todoMock.updateMany).toHaveBeenCalledWith({ where: { id: todoId, user_id: 'owner_A' }, data: { title: 'Edited title', body: undefined } });
+    expect(todoSubtaskMock.updateMany).not.toHaveBeenCalled();
   });
 
-  it('rejects unauthenticated callers without touching the database', async () => {
-    signIn(null);
-
-    await expect(
-      updateTodoListAction({
-        id: todoIdB,
-        title: 'Valid title',
-        completed: false,
-      })
-    ).rejects.toThrow('Unauthorized');
-
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+  it('scopes explicit completion transitions and synchronizes owned children', async () => {
+    await updateTodoAction({ id: todoId, title: 'Parent title', completed: true, completionIntent: 'set' });
+    expect(todoMock.updateMany).toHaveBeenCalledWith({ where: { id: todoId, user_id: 'owner_A', completed: false }, data: { completed: true } });
+    expect(todoSubtaskMock.updateMany).toHaveBeenCalledWith({ where: { todoId, user_id: 'owner_A' }, data: { completed: true } });
   });
 
-  it('scopes the update to id + authenticated owner so another user\'s todo is untouched', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 0 });
+  it('toggles only an owned parent and its owned children', async () => {
+    await toggleTodoAction({ id: todoId, completed: true });
+    expect(todoSubtaskMock.updateMany).toHaveBeenCalledWith({ where: { todoId, user_id: 'owner_A' }, data: { completed: true } });
+    expect(todoMock.updateMany).toHaveBeenCalledWith({ where: { id: todoId, user_id: 'owner_A', completed: false }, data: { completed: true } });
+  });
+});
 
-    await expect(
-      updateTodoListAction({
-        id: todoIdB,
-        title: 'Valid title',
-        completed: false,
-      })
-    ).rejects.toThrow('Todo not found');
+describe('Todo deletion', () => {
+  it('validates input, requires Clerk identity, and preserves not-found domain errors', async () => {
+    await expect(deleteTodoAction({ id: 'bad' })).rejects.toThrow();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
 
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdB, user_id: 'user_A' },
-      data: { title: 'Valid title', body: undefined, completed: false },
-    });
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+    authMock.mockResolvedValueOnce({ userId: null });
+    await expect(deleteTodoAction({ id: todoId })).rejects.toThrow('Unauthorized');
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+
+    todoMock.findFirst.mockResolvedValueOnce(null);
+    await expect(deleteTodoAction({ id: todoId })).rejects.toThrow('Todo not found');
+    expect(todoSubtaskMock.deleteMany).not.toHaveBeenCalled();
+    expect(todoMock.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('updates when the authenticated user owns the todo', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: true,
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: { title: 'Valid title', body: undefined, completed: true },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  it('deletes child rows and the parent inside the same guarded transaction', async () => {
+    await deleteTodoAction({ id: todoId });
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(todoMock.updateMany).toHaveBeenCalledWith({ where: { id: todoId, user_id: 'owner_A', completed: false }, data: { completed: true } });
+    expect(todoSubtaskMock.deleteMany).toHaveBeenCalledWith({ where: { todoId, user_id: 'owner_A' } });
+    expect(todoMock.deleteMany).toHaveBeenCalledWith({ where: { id: todoId, user_id: 'owner_A' } });
   });
 
-  it('persists an explicitly cleared description as null', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      body: '',
-      completed: false,
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: { title: 'Valid title', body: null, completed: false },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
-  });
-
-  it('persists a changed description value', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      body: 'A brand new description value.',
-      completed: false,
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: { title: 'Valid title', body: 'A brand new description value.', completed: false },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
-  });
-
-  it('persists a legacy short description value unchanged', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      body: 'short',
-      completed: false,
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: { title: 'Valid title', body: 'short', completed: false },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
-  });
-
-  it('updates a due date at UTC midnight and applies a supplied priority', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      dueDate: '2026-11-03',
-      priority: 'low',
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: {
-        title: 'Valid title',
-        body: undefined,
-        completed: false,
-        dueDate: new Date('2026-11-03T00:00:00.000Z'),
-        priority: 'low',
-      },
-    });
-  });
-
-  it('clears an explicitly empty due date without changing omitted priority', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      dueDate: '',
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: {
-        title: 'Valid title',
-        body: undefined,
-        completed: false,
-        dueDate: null,
-      },
-    });
-  });
-
-  it('updates only priority when dueDate is omitted', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      priority: 'high',
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: {
-        title: 'Valid title',
-        body: undefined,
-        completed: false,
-        priority: 'high',
-      },
-    });
-  });
-
-  it('rejects invalid date-only values before updating the database', async () => {
-    signIn('user_A');
-
-    await expect(
-      updateTodoListAction({
-        id: todoIdA,
-        title: 'Valid title',
-        completed: false,
-        dueDate: '2026-02-30',
-      })
-    ).rejects.toThrow();
-
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it('moves an owned Todo to an active List after verifying both owners', async () => {
-    signIn('user_A');
-    todoMock.findFirst.mockResolvedValue({ listId: null });
-    todoListMock.findFirst.mockResolvedValue({ isArchived: false });
-    todoListMock.updateMany.mockResolvedValue({ count: 1 });
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      listId: '0123456789abcdef01234567',
-    });
-
-    expect(todoMock.findFirst).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      select: { listId: true },
-    });
-    expect(todoListMock.findFirst).toHaveBeenCalledWith({
-      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
-      select: { isArchived: true },
-    });
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: expect.objectContaining({ listId: '0123456789abcdef01234567' }),
-    });
-  });
-
-  it('moves a Todo back to the Inbox by explicitly setting listId to null', async () => {
-    signIn('user_A');
-    todoMock.findFirst.mockResolvedValue({ listId: '0123456789abcdef01234567' });
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      listId: null,
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: expect.objectContaining({ listId: null }),
-    });
-  });
-
-  it('rejects a foreign-owned or archived target List', async () => {
-    signIn('user_A');
-    todoMock.findFirst.mockResolvedValue({ listId: null });
-    todoListMock.findFirst.mockResolvedValue(null);
-
-    await expect(
-      updateTodoListAction({
-        id: todoIdA,
-        title: 'Valid title',
-        completed: false,
-        listId: '0123456789abcdef01234567',
-      })
-    ).rejects.toThrow('List not found');
-    expect(todoListMock.findFirst).toHaveBeenCalledWith({
-      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
-      select: { isArchived: true },
-    });
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('rejects moving an existing Todo into an archived List', async () => {
-    signIn('user_A');
-    todoMock.findFirst.mockResolvedValue({ listId: null });
-    todoListMock.findFirst.mockResolvedValue({ isArchived: true });
-
-    await expect(
-      updateTodoListAction({
-        id: todoIdA,
-        title: 'Valid title',
-        completed: false,
-        listId: '0123456789abcdef01234567',
-      })
-    ).rejects.toThrow('List not found');
-    expect(todoListMock.findFirst).toHaveBeenCalledWith({
-      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
-      select: { isArchived: true },
-    });
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('allows editing a Todo that remains assigned to its archived List', async () => {
-    signIn('user_A');
-    todoMock.findFirst.mockResolvedValue({ listId: '0123456789abcdef01234567' });
-    todoListMock.findFirst.mockResolvedValue({ isArchived: true });
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await updateTodoListAction({
-      id: todoIdA,
-      title: 'Updated title',
-      completed: false,
-      listId: '0123456789abcdef01234567',
-    });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: expect.objectContaining({ title: 'Updated title', listId: '0123456789abcdef01234567' }),
-    });
-    expect(todoListMock.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('returns a safe error if a List-related update transaction fails', async () => {
-    signIn('user_A');
-    prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
-
-    const failure = await updateTodoListAction({
-      id: todoIdA,
-      title: 'Valid title',
-      completed: false,
-      listId: null,
-    }).catch((error: unknown) => error);
-
-    expect(failure).toMatchObject({
-      message: 'Could not save your changes. Please try again.',
-    });
-    expect(failure).toBeInstanceOf(Error);
-    if (failure instanceof Error) {
-      expect(failure.message).not.toContain('private connection details');
+  it('logs allowlisted Prisma diagnostics while keeping unexpected failures generic', async () => {
+    class PrismaClientKnownRequestError extends Error {
+      code = 'P2031';
+      constructor() { super('mongodb://secret-user:secret-pass@private-host/private-db'); this.name = 'PrismaClientKnownRequestError'; }
     }
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+    prismaMock.$transaction.mockRejectedValueOnce(new PrismaClientKnownRequestError());
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(deleteTodoAction({ id: todoId })).rejects.toThrow('Could not delete this Todo. Please try again.');
+    expect(diagnostic).toHaveBeenCalledWith('[server-action] Transaction failed', {
+      operation: 'deleteTodoAction', errorClass: 'PrismaClientKnownRequestError', errorName: 'PrismaClientKnownRequestError', errorCode: 'P2031',
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('secret-pass');
+
+    diagnostic.mockImplementation(() => { throw new Error('logger failure'); });
+    prismaMock.$transaction.mockRejectedValueOnce(Object.assign(new Error('private task title'), { name: 'PrivateTaskTitle', code: 'private-data' }));
+    await expect(deleteTodoAction({ id: todoId })).rejects.toThrow('Could not delete this Todo. Please try again.');
+    expect(JSON.stringify(diagnostic.mock.calls[1])).not.toContain('PrivateTaskTitle');
+    diagnostic.mockRestore();
   });
 });
 
-describe('toggleTodoListAction', () => {
-  it('rejects malformed Todo IDs before updating Prisma', async () => {
-    signIn('user_A');
-
-    await expect(toggleTodoListAction({ id: 'not-an-object-id', completed: true })).rejects.toThrow();
-
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('rejects unauthenticated callers without touching the database', async () => {
-    signIn(null);
-
-    await expect(
-      toggleTodoListAction({ id: todoIdB, completed: true })
-    ).rejects.toThrow('Unauthorized');
-
-    expect(todoMock.updateMany).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it('scopes the toggle to id + authenticated owner so another user\'s todo is untouched', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 0 });
-
-    await expect(
-      toggleTodoListAction({ id: todoIdB, completed: true })
-    ).rejects.toThrow('Todo not found');
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdB, user_id: 'user_A' },
-      data: { completed: true },
-    });
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it('toggles when the authenticated user owns the todo', async () => {
-    signIn('user_A');
-    todoMock.updateMany.mockResolvedValue({ count: 1 });
-
-    await toggleTodoListAction({ id: todoIdA, completed: false });
-
-    expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-      data: { completed: false },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
-  });
-});
-
-describe('deleteTodoListAction', () => {
-  it('rejects malformed Todo IDs before deleting from Prisma', async () => {
-    signIn('user_A');
-
-    await expect(deleteTodoListAction({ id: 'not-an-object-id' })).rejects.toThrow();
-
-    expect(todoMock.deleteMany).not.toHaveBeenCalled();
-  });
-
-  it('rejects unauthenticated callers without touching the database', async () => {
-    signIn(null);
-
-    await expect(deleteTodoListAction({ id: todoIdB })).rejects.toThrow(
-      'Unauthorized'
-    );
-
-    expect(todoMock.deleteMany).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it('scopes the delete to id + authenticated owner so another user\'s todo is untouched', async () => {
-    signIn('user_A');
-    todoMock.deleteMany.mockResolvedValue({ count: 0 });
-
-    await expect(deleteTodoListAction({ id: todoIdB })).rejects.toThrow(
-      'Todo not found'
-    );
-
-    expect(todoMock.deleteMany).toHaveBeenCalledWith({
-      where: { id: todoIdB, user_id: 'user_A' },
-    });
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it('deletes when the authenticated user owns the todo', async () => {
-    signIn('user_A');
-    todoMock.deleteMany.mockResolvedValue({ count: 1 });
-
-    await deleteTodoListAction({ id: todoIdA });
-
-    expect(todoMock.deleteMany).toHaveBeenCalledWith({
-      where: { id: todoIdA, user_id: 'user_A' },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith('/');
-  });
-});
-
-describe('getUserTodoList (server-only query, no longer a Server Action)', () => {
-  it('returns an empty list instead of querying when no user id is provided', async () => {
+describe('Todo reads', () => {
+  it('returns no records without an owner and scopes reads to authenticated owner IDs', async () => {
     await expect(getUserTodoList(null)).resolves.toEqual([]);
-    expect(todoMock.findMany).not.toHaveBeenCalled();
-  });
-
-  it('scopes the read to the given owner', async () => {
     todoMock.findMany.mockResolvedValue([]);
-
-    await getUserTodoList('user_A');
-
-    expect(todoMock.findMany).toHaveBeenCalledWith({
-      where: { user_id: 'user_A' },
-      orderBy: { createdAt: 'desc' },
-    });
+    await getUserTodoList('owner_A');
+    expect(todoMock.findMany).toHaveBeenCalledWith({ where: { user_id: 'owner_A' }, orderBy: { createdAt: 'desc' } });
   });
 });

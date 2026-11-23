@@ -1,12 +1,5 @@
 import type { TaskPriority } from '@/lib/validations/task';
 
-export interface ITodoList {
-    id: string;
-    name: string;
-    isArchived: boolean;
-    todoCount?: number;
-}
-
 export interface ITodos {
     id: string;
     title: string;
@@ -15,5 +8,14 @@ export interface ITodos {
     createdAt?: Date;
     dueDate?: Date | string | null;
     priority?: TaskPriority | null;
-    listId?: string | null;
+    todoType?: 'standalone' | 'withSubtasks';
+    subtasks?: ITodoSubtask[];
+}
+
+export interface ITodoSubtask {
+    id: string;
+    todoId: string;
+    title: string;
+    completed: boolean;
+    createdAt: Date | string;
 }

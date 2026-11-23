@@ -10,28 +10,29 @@ import {
 } from '@/components/ui/input-group';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { ITodoList } from '@/interfaces';
 
 interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
   control: Control<TFieldValues>;
-  lists?: ITodoList[];
   titleLabel?: string;
   descriptionLabel?: string;
   titleId?: string;
   descriptionId?: string;
   completedId?: string;
+  onCompletedChange?: () => void;
+  completedDisabled?: boolean;
   dueDateId?: string;
   priorityId?: string;
 }
 
 export function TodoFormFields<TFieldValues extends FieldValues>({
   control,
-  lists = [],
   titleLabel = 'Title',
   descriptionLabel = 'Description',
   titleId = 'todo-title',
   descriptionId = 'todo-description',
   completedId = 'todo-completed',
+  onCompletedChange,
+  completedDisabled = false,
   dueDateId = 'todo-due-date',
   priorityId = 'todo-priority',
 }: TodoFormFieldsProps<TFieldValues>) {
@@ -50,31 +51,6 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
               placeholder="Title"
               autoComplete="off"
             />
-            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-          </Field>
-        )}
-      />
-
-      <Controller
-        name={'listId' as Path<TFieldValues>}
-        control={control}
-        render={({ field, fieldState }) => (
-          <Field data-invalid={fieldState.invalid}>
-            <FieldLabel htmlFor="todo-list">List</FieldLabel>
-            <select
-              {...field}
-              id="todo-list"
-              value={field.value ?? ''}
-              aria-invalid={fieldState.invalid}
-              className="h-9 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
-            >
-              <option value="">Inbox</option>
-              {lists.map((list) => (
-                <option key={list.id} value={list.id}>
-                  {list.name}{list.isArchived ? ' (Archived)' : ''}
-                </option>
-              ))}
-            </select>
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
           </Field>
         )}
@@ -151,8 +127,12 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
           <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
             <Checkbox
               checked={value}
+              disabled={completedDisabled}
               aria-labelledby={`${completedId}-label`}
-              onCheckedChange={onChange}
+              onCheckedChange={(checked) => {
+                onChange(checked);
+                onCompletedChange?.();
+              }}
               className="after:-inset-y-4 sm:after:-inset-y-2"
             />
             <FieldLabel id={`${completedId}-label`}>Completed</FieldLabel>

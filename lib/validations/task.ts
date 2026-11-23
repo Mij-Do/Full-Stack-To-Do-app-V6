@@ -2,12 +2,13 @@ import { z } from 'zod';
 
 export const taskPrioritySchema = z.enum(['low', 'medium', 'high']);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
+export const todoTypeSchema = z.enum(['standalone', 'withSubtasks']);
+export type TodoType = z.infer<typeof todoTypeSchema>;
 
 const isMongoObjectId = (value: string) =>
   value.length === 24 && /^[\da-f]{24}$/i.test(value);
 
 export const mongoObjectIdSchema = z.string().refine(isMongoObjectId, 'Invalid MongoDB ObjectId.');
-export const todoListIdSchema = z.string().refine(isMongoObjectId, 'Invalid List ID.');
 
 const isValidDateOnly = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -63,21 +64,20 @@ export const taskUpdateBodySchema = z
 export const taskCreateSchema = taskBaseSchema.extend({
   dueDate: taskCreateDueDateSchema,
   priority: taskPrioritySchema.default('medium'),
-  listId: todoListIdSchema.nullable().optional(),
+  todoType: todoTypeSchema.default('standalone'),
+  initialSubtasks: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
 });
 export const taskUpdateSchema = taskBaseSchema.extend({
   id: mongoObjectIdSchema,
+  completionIntent: z.enum(['preserve', 'set']).default('preserve'),
   body: taskUpdateBodySchema,
   dueDate: taskUpdateDueDateSchema,
   priority: taskPrioritySchema.optional(),
-  listId: todoListIdSchema.nullable().optional(),
 });
-const todoListFormIdSchema = z.union([todoListIdSchema, z.literal('')]).optional();
 
 export const taskEditFormSchema = taskUpdateSchema
-  .omit({ id: true })
-  .extend({ listId: todoListFormIdSchema });
-export const formSchema = taskCreateSchema.extend({ listId: todoListFormIdSchema });
+  .omit({ id: true });
+export const formSchema = taskCreateSchema;
 export const taskToggleSchema = z.object({
   id: mongoObjectIdSchema,
   completed: z.boolean(),

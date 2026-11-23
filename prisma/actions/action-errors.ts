@@ -1,5 +1,3 @@
-export const LIST_NOT_EMPTY_MESSAGE = 'This List contains Todos and cannot be deleted.';
-
 export class ActionDomainError extends Error {
   constructor(message: string) {
     super(message);
@@ -7,9 +5,68 @@ export class ActionDomainError extends Error {
   }
 }
 
-export const normalizeTransactionError = (error: unknown, fallbackMessage: string): Error => {
+const PRISMA_ERROR_IDENTIFIERS = new Set([
+  'PrismaClientKnownRequestError',
+  'PrismaClientUnknownRequestError',
+  'PrismaClientRustPanicError',
+  'PrismaClientInitializationError',
+  'PrismaClientValidationError',
+]);
+
+const safePrismaIdentifier = (value: unknown): string | undefined =>
+  typeof value === 'string' && PRISMA_ERROR_IDENTIFIERS.has(value) ? value : undefined;
+
+const readErrorProperty = (error: object, key: 'name' | 'code'): unknown => {
+  try {
+    return (error as Record<typeof key, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+};
+
+const safeErrorDiagnostics = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return {};
+  }
+
+  let constructorName: unknown;
+  try {
+    constructorName = Object.getPrototypeOf(error)?.constructor?.name;
+  } catch {
+    constructorName = undefined;
+  }
+
+  const errorName = readErrorProperty(error, 'name');
+  const code = readErrorProperty(error, 'code');
+  const errorClass = safePrismaIdentifier(constructorName);
+  const safeName = safePrismaIdentifier(errorName);
+  const errorCode = typeof code === 'string' && /^P\d{4}$/.test(code) ? code : undefined;
+
+  return {
+    ...(errorClass && { errorClass }),
+    ...(safeName && { errorName: safeName }),
+    ...(errorCode && { errorCode }),
+  };
+};
+
+export const normalizeTransactionError = (
+  error: unknown,
+  fallbackMessage: string,
+  operation?: string
+): Error => {
   if (error instanceof ActionDomainError) {
     return new Error(error.message);
+  }
+
+  if (operation === 'deleteTodoAction') {
+    try {
+      console.error('[server-action] Transaction failed', {
+        operation: 'deleteTodoAction',
+        ...safeErrorDiagnostics(error),
+      });
+    } catch {
+      // Diagnostics are best-effort and must not mask the normalized action error.
+    }
   }
 
   return new Error(fallbackMessage);

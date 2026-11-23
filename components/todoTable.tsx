@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useOptimistic, useRef, useState } from 'react';
+import { Fragment, startTransition, useOptimistic, useRef, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -14,16 +14,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ITodos, ITodoList } from '@/interfaces';
+import { ITodos } from '@/interfaces';
 import { Badge } from './ui/badge';
 import TodosTableActions from './TodosTableActions';
 import { formatDueDate, truncateDescription } from '@/lib/utils';
 import type { TaskPriority } from '@/lib/validations/task';
-import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
+import { deleteTodoAction, toggleTodoAction } from '@/prisma/actions/todo.action';
+import SubtaskChecklist from '@/components/SubtaskChecklist';
 
 interface IProps {
   todos: ITodos[];
-  lists?: ITodoList[];
   emptyMessage?: string;
 }
 
@@ -86,7 +86,6 @@ const sortByCreatedAt = (items: ITodos[], order: SortOrder): ITodos[] => {
 
 export default function TodoTable({
   todos: initialTodos,
-  lists = [],
   emptyMessage = "You don't have any todos yet.",
 }: IProps) {
   const [todos, updateTodos] = useOptimistic<ITodos[], TodoAction>(initialTodos, (state, action) => {
@@ -143,7 +142,7 @@ export default function TodoTable({
           updateTodos({ type: 'toggle', id: todo.id, completed: nextCompleted });
 
           try {
-            await toggleTodoListAction({ id: todo.id, completed: nextCompleted });
+            await toggleTodoAction({ id: todo.id, completed: nextCompleted });
           } catch (actionError) {
             console.error('Failed to update completion status', actionError);
             updateTodos({
@@ -177,7 +176,7 @@ export default function TodoTable({
           updateTodos({ type: 'delete', id });
 
           try {
-            await deleteTodoListAction({ id });
+            await deleteTodoAction({ id });
           } catch (actionError) {
             console.error('Failed to delete todo', actionError);
             updateTodos({ type: 'restore', todo: deletedTodo, index: todoIndex });
@@ -321,7 +320,10 @@ export default function TodoTable({
               <div key={todo.id} className="min-w-0 rounded-xl border bg-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-2">
-                    <h3 className="wrap-anywhere font-semibold">{todo.title}</h3>
+                    <h3 className="wrap-anywhere font-semibold">
+                      {todo.title}
+                      {todo.todoType === 'withSubtasks' && <span className="ml-2 inline-flex rounded-[5px] border px-2 py-0.5 text-xs font-medium text-muted-foreground">Todo with Subtasks</span>}
+                    </h3>
                     {todo.body && (
                       <p className="wrap-anywhere text-sm text-muted-foreground">
                         {truncateDescription(todo.body)}
@@ -339,12 +341,12 @@ export default function TodoTable({
                 <div className="mt-4 flex justify-end border-t pt-3">
                   <TodosTableActions
                     todo={todo}
-                    lists={lists}
                     onDelete={handleDelete}
                     onToggle={handleToggle}
                     isPending={Boolean(pendingIds[todo.id])}
                   />
                 </div>
+                {todo.todoType === 'withSubtasks' && <SubtaskChecklist todoId={todo.id} initialSubtasks={todo.subtasks} />}
               </div>
             ))}
             <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3 text-sm font-medium">
@@ -355,7 +357,7 @@ export default function TodoTable({
 
           <div className="hidden w-full md:block">
             <Table>
-              <TableCaption>A list of your todos.</TableCaption>
+              <TableCaption>Your Todos.</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Title</TableHead>
@@ -368,8 +370,11 @@ export default function TodoTable({
               </TableHeader>
               <TableBody>
                 {visibleTodos.map((todo) => (
-                  <TableRow key={todo.id}>
-                    <TableCell className="wrap-anywhere whitespace-normal font-medium">{todo.title}</TableCell>
+                  <Fragment key={todo.id}>
+                  <TableRow key={todo.id} className={todo.todoType === 'withSubtasks' ? 'border-x border-t border-b-0 [&>td]:border-b-0' : undefined}>
+                    <TableCell className="wrap-anywhere whitespace-normal font-medium">
+                      {todo.todoType === 'withSubtasks' ? <div className="rounded-[5px] border-l-[5px] border-primary/40 py-1 pl-3"><span>{todo.title}</span><span className="ml-2 text-xs font-normal text-muted-foreground">Todo with Subtasks</span></div> : todo.title}
+                    </TableCell>
                     <TableCell className="wrap-anywhere whitespace-normal">
                       {todo.body ? truncateDescription(todo.body) : null}
                     </TableCell>
@@ -381,13 +386,14 @@ export default function TodoTable({
                     <TableCell className="text-right">
                       <TodosTableActions
                         todo={todo}
-                        lists={lists}
                         onDelete={handleDelete}
                         onToggle={handleToggle}
                         isPending={Boolean(pendingIds[todo.id])}
                       />
                     </TableCell>
                   </TableRow>
+                  {todo.todoType === 'withSubtasks' && <TableRow key={`${todo.id}-subtasks`} className="border-x border-b"><TableCell colSpan={6} className="py-1"><SubtaskChecklist todoId={todo.id} initialSubtasks={todo.subtasks} /></TableCell></TableRow>}
+                  </Fragment>
                 ))}
               </TableBody>
               <TableFooter>
