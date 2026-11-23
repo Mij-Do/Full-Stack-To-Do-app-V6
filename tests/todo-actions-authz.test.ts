@@ -143,6 +143,23 @@ describe('createTodoListAction', () => {
     ).rejects.toThrow('List not found');
     expect(todoMock.create).not.toHaveBeenCalled();
   });
+
+  it('returns a safe error if the List-assignment transaction fails', async () => {
+    signIn('user_A');
+    prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
+
+    await expect(
+      createTodoListAction({
+        title: 'List task',
+        completed: false,
+        listId: '0123456789abcdef01234567',
+      })
+    ).rejects.toMatchObject({
+      message: 'Could not create this Todo in the selected List. Please try again.',
+    });
+    expect(todoMock.create).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateTodoListAction', () => {
@@ -411,6 +428,27 @@ describe('updateTodoListAction', () => {
       })
     ).rejects.toThrow('List not found');
     expect(todoMock.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe error if a List-related update transaction fails', async () => {
+    signIn('user_A');
+    prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
+
+    const failure = await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      listId: null,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      message: 'Could not save your changes. Please try again.',
+    });
+    expect(failure).toBeInstanceOf(Error);
+    if (failure instanceof Error) {
+      expect(failure.message).not.toContain('private connection details');
+    }
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });
 

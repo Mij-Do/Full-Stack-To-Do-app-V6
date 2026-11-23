@@ -28,6 +28,7 @@ import {
   deleteEmptyListAction,
   renameListAction,
 } from '@/prisma/actions/list.action';
+import { LIST_NOT_EMPTY_MESSAGE } from '@/prisma/actions/action-errors';
 
 const validId = '0123456789abcdef01234567';
 const transaction = { todoList: todoListMock, todo: todoMock };
@@ -99,9 +100,7 @@ describe('List actions', () => {
     todoListMock.updateMany.mockResolvedValue({ count: 1 });
     todoMock.count.mockResolvedValue(1);
 
-    await expect(deleteEmptyListAction({ id: validId })).rejects.toThrow(
-      'Only empty Lists can be deleted'
-    );
+    await expect(deleteEmptyListAction({ id: validId })).rejects.toThrow(LIST_NOT_EMPTY_MESSAGE);
     expect(todoMock.count).toHaveBeenCalledWith({ where: { listId: validId } });
     expect(todoListMock.deleteMany).not.toHaveBeenCalled();
   });
@@ -121,5 +120,20 @@ describe('List actions', () => {
       where: { id: validId, user_id: 'owner_A' },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  });
+
+  it('returns a distinct safe error when the deletion transaction fails', async () => {
+    prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
+
+    const failure = await deleteEmptyListAction({ id: validId }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      message: 'Could not delete this List right now. Please try again.',
+    });
+    expect(failure).toBeInstanceOf(Error);
+    if (failure instanceof Error) {
+      expect(failure.message).not.toContain('private connection details');
+    }
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });

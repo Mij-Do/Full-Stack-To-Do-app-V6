@@ -8,6 +8,11 @@ import {
   validateListIdAction,
   validateListRename,
 } from '@/prisma/actions/validation';
+import {
+  ActionDomainError,
+  LIST_NOT_EMPTY_MESSAGE,
+  normalizeTransactionError,
+} from '@/prisma/actions/action-errors';
 
 const prisma = new PrismaClient();
 
@@ -57,23 +62,27 @@ export const deleteEmptyListAction = async (payload: unknown) => {
   const userId = await requireUserId();
   const { id } = validateListIdAction(payload);
 
-  await prisma.$transaction(async (transaction) => {
-    const { count: lockedListCount } = await transaction.todoList.updateMany({
-      where: { id, user_id: userId },
-      data: { updatedAt: new Date() },
-    });
-    if (lockedListCount === 0) throw new Error('List not found');
+  try {
+    await prisma.$transaction(async (transaction) => {
+      const { count: lockedListCount } = await transaction.todoList.updateMany({
+        where: { id, user_id: userId },
+        data: { updatedAt: new Date() },
+      });
+      if (lockedListCount === 0) throw new ActionDomainError('List not found');
 
-    const todoCount = await transaction.todo.count({
-      where: { listId: id },
-    });
-    if (todoCount > 0) throw new Error('Only empty Lists can be deleted');
+      const todoCount = await transaction.todo.count({
+        where: { listId: id },
+      });
+      if (todoCount > 0) throw new ActionDomainError(LIST_NOT_EMPTY_MESSAGE);
 
-    const { count } = await transaction.todoList.deleteMany({
-      where: { id, user_id: userId },
+      const { count } = await transaction.todoList.deleteMany({
+        where: { id, user_id: userId },
+      });
+      if (count === 0) throw new ActionDomainError('List not found');
     });
-    if (count === 0) throw new Error('List not found');
-  });
+  } catch (error) {
+    throw normalizeTransactionError(error, 'Could not delete this List right now. Please try again.');
+  }
 
   revalidatePath('/');
 };

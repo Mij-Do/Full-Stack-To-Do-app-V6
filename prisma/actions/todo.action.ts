@@ -10,6 +10,7 @@ import {
   validateTaskUpdate,
 } from '@/prisma/actions/validation';
 import { dateOnlyToUtcDate } from '@/lib/utils';
+import { ActionDomainError, normalizeTransactionError } from '@/prisma/actions/action-errors';
 
 const prisma = new PrismaClient();
 
@@ -41,22 +42,26 @@ export const createTodoListAction = async (payload: unknown) => {
   if (!targetListId) {
     await prisma.todo.create({ data });
   } else {
-    await prisma.$transaction(async (transaction) => {
-      const { count } = await transaction.todoList.updateMany({
-        where: {
-          id: targetListId,
-          user_id: userId,
-          isArchived: false,
-        },
-        data: { updatedAt: new Date() },
+    try {
+      await prisma.$transaction(async (transaction) => {
+        const { count } = await transaction.todoList.updateMany({
+          where: {
+            id: targetListId,
+            user_id: userId,
+            isArchived: false,
+          },
+          data: { updatedAt: new Date() },
+        });
+
+        if (count === 0) {
+          throw new ActionDomainError('List not found');
+        }
+
+        await transaction.todo.create({ data });
       });
-
-      if (count === 0) {
-        throw new Error('List not found');
-      }
-
-      await transaction.todo.create({ data });
-    });
+    } catch (error) {
+      throw normalizeTransactionError(error, 'Could not create this Todo in the selected List. Please try again.');
+    }
   }
 
   revalidatePath('/');
@@ -103,41 +108,45 @@ export const updateTodoListAction = async (payload: unknown) => {
     });
     if (count === 0) throw new Error('Todo not found');
   } else {
-    await prisma.$transaction(async (transaction) => {
-      const todo = await transaction.todo.findFirst({
-        where: { id: validated.id, user_id: userId },
-        select: { listId: true },
-      });
-      if (!todo) throw new Error('Todo not found');
-
-      if (validated.listId !== null) {
-        const list = await transaction.todoList.findFirst({
-          where: { id: validated.listId, user_id: userId },
-          select: { isArchived: true },
+    try {
+      await prisma.$transaction(async (transaction) => {
+        const todo = await transaction.todo.findFirst({
+          where: { id: validated.id, user_id: userId },
+          select: { listId: true },
         });
-        if (!list || (list.isArchived && todo.listId !== validated.listId)) {
-          throw new Error('List not found');
-        }
+        if (!todo) throw new ActionDomainError('Todo not found');
 
-        if (todo.listId !== validated.listId) {
-          const { count } = await transaction.todoList.updateMany({
-            where: {
-              id: validated.listId,
-              user_id: userId,
-              isArchived: false,
-            },
-            data: { updatedAt: new Date() },
+        if (validated.listId !== null) {
+          const list = await transaction.todoList.findFirst({
+            where: { id: validated.listId, user_id: userId },
+            select: { isArchived: true },
           });
-          if (count === 0) throw new Error('List not found');
-        }
-      }
+          if (!list || (list.isArchived && todo.listId !== validated.listId)) {
+            throw new ActionDomainError('List not found');
+          }
 
-      const { count } = await transaction.todo.updateMany({
-        where: { id: validated.id, user_id: userId },
-        data: { ...data, listId: validated.listId },
+          if (todo.listId !== validated.listId) {
+            const { count } = await transaction.todoList.updateMany({
+              where: {
+                id: validated.listId,
+                user_id: userId,
+                isArchived: false,
+              },
+              data: { updatedAt: new Date() },
+            });
+            if (count === 0) throw new ActionDomainError('List not found');
+          }
+        }
+
+        const { count } = await transaction.todo.updateMany({
+          where: { id: validated.id, user_id: userId },
+          data: { ...data, listId: validated.listId },
+        });
+        if (count === 0) throw new ActionDomainError('Todo not found');
       });
-      if (count === 0) throw new Error('Todo not found');
-    });
+    } catch (error) {
+      throw normalizeTransactionError(error, 'Could not save your changes. Please try again.');
+    }
   }
 
   revalidatePath('/');

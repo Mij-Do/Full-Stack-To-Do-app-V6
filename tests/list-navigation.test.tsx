@@ -72,4 +72,28 @@ describe('ListNavigation', () => {
     await waitFor(() => expect(archiveMock).toHaveBeenCalledWith({ id: lists[0].id }));
     expect(pushMock).toHaveBeenCalledWith('/?view=archived');
   });
+
+  it('shows distinct safe deletion messages for non-empty and failed transactions', async () => {
+    const emptyList = { id: lists[2].id, name: 'Empty', isArchived: true, todoCount: 0 };
+    const userFacingNonEmptyMessage =
+      'This List still contains Todos. Move or delete them before deleting the List.';
+    const { rerender } = render(
+      <ListNavigation lists={[emptyList]} selectedView="list" selectedListId={emptyList.id} />
+    );
+
+    deleteMock.mockRejectedValueOnce(new Error('This List contains Todos and cannot be deleted.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete empty List' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(userFacingNonEmptyMessage));
+    expect(screen.getByRole('alert')).not.toHaveTextContent('database');
+
+    rerender(<ListNavigation lists={[emptyList]} selectedView="list" selectedListId={emptyList.id} />);
+    deleteMock.mockRejectedValueOnce(new Error('MongoServerError: private connection details'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete empty List' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Could not delete this List right now. Please try again.'
+      )
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('private connection details');
+  });
 });

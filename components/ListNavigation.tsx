@@ -12,6 +12,7 @@ import {
 } from '@/prisma/actions/list.action';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LIST_NOT_EMPTY_MESSAGE } from '@/prisma/actions/action-errors';
 
 type SelectedView = 'inbox' | 'archived' | 'list';
 
@@ -80,8 +81,12 @@ export default function ListNavigation({
     try {
       await deleteEmptyListAction({ id: selectedList.id });
       router.push(selectedList.isArchived ? '/?view=archived' : '/?view=inbox');
-    } catch {
-      setError('Only empty Lists can be deleted.');
+    } catch (error) {
+      setError(
+        error instanceof Error && error.message === LIST_NOT_EMPTY_MESSAGE
+          ? 'This List still contains Todos. Move or delete them before deleting the List.'
+          : 'Could not delete this List right now. Please try again.'
+      );
     }
   };
 
