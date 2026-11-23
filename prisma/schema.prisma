@@ -8,6 +8,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
 model Todo {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   title     String
@@ -15,4 +21,8 @@ model Todo {
   completed Boolean @default(false)
   user_id String
   createdAt DateTime @default(now())
+  dueDate DateTime?
+  priority TaskPriority? @default(medium)
+
+  @@index([user_id, createdAt])
 }

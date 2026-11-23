@@ -264,6 +264,195 @@ describe('TodoTable component', () => {
     errorSpy.mockRestore();
   });
 
+  it('keeps another todo toggled when a concurrent delete fails', async () => {
+    const toggle = deferred();
+    const deletion = deferred();
+    vi.mocked(toggleTodoListAction).mockReturnValueOnce(toggle.promise);
+    vi.mocked(deleteTodoListAction).mockReturnValueOnce(deletion.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByLabelText('Delete todo')[1]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryAllByText('Second Todo')).toHaveLength(0));
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark First Todo as active' }).every(
+          (checkbox) => checkbox.getAttribute('aria-checked') === 'true'
+        )
+      ).toBe(true)
+    );
+
+    deletion.reject(new Error('delete failed'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/Failed to delete the task/)
+    );
+    expect(screen.getAllByText('Second Todo').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark First Todo as active' }).every(
+        (checkbox) =>
+          checkbox.getAttribute('aria-checked') === 'true' && checkbox.hasAttribute('disabled')
+      )
+    ).toBe(true);
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark Second Todo as active' }).every(
+        (checkbox) => checkbox.getAttribute('aria-checked') === 'true'
+      )
+    ).toBe(true);
+
+    toggle.resolve();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' }).every(
+          (checkbox) => !checkbox.hasAttribute('disabled')
+        )
+      ).toBe(true)
+    );
+    expect(errorSpy).toHaveBeenCalledWith('Failed to delete todo', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('keeps another todo toggled when a concurrent toggle fails', async () => {
+    const firstToggle = deferred();
+    const secondToggle = deferred();
+    vi.mocked(toggleTodoListAction)
+      .mockReturnValueOnce(firstToggle.promise)
+      .mockReturnValueOnce(secondToggle.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]);
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark Second Todo as active' })[0]);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark First Todo as active' }).every(
+          (checkbox) => checkbox.getAttribute('aria-checked') === 'true'
+        )
+      ).toBe(true);
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark Second Todo as completed' }).every(
+          (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+        )
+      ).toBe(true);
+    });
+
+    firstToggle.reject(new Error('first toggle failed'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/Failed to update the task status/)
+    );
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' }).every(
+        (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+      )
+    ).toBe(true);
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark Second Todo as completed' }).every(
+        (checkbox) =>
+          checkbox.getAttribute('aria-checked') === 'false' && checkbox.hasAttribute('disabled')
+      )
+    ).toBe(true);
+
+    secondToggle.resolve();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark Second Todo as active' }).every(
+          (checkbox) => !checkbox.hasAttribute('disabled')
+        )
+      ).toBe(true)
+    );
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update completion status', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('does not resurrect a successfully deleted todo when another toggle fails', async () => {
+    const toggle = deferred();
+    const deletion = deferred();
+    vi.mocked(toggleTodoListAction).mockReturnValueOnce(toggle.promise);
+    vi.mocked(deleteTodoListAction).mockReturnValueOnce(deletion.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]);
+    await user.click(screen.getAllByLabelText('Delete todo')[1]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryAllByText('Second Todo')).toHaveLength(0));
+
+    deletion.resolve();
+    rerender(<TodoTable todos={todos.filter((todo) => todo.id !== '2')} />);
+    await waitFor(() => expect(screen.queryAllByText('Second Todo')).toHaveLength(0));
+
+    toggle.reject(new Error('toggle failed'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/Failed to update the task status/)
+    );
+    expect(screen.queryAllByText('Second Todo')).toHaveLength(0);
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' }).every(
+        (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+      )
+    ).toBe(true);
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update completion status', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it('does not overwrite a successful toggle when another toggle fails', async () => {
+    const firstToggle = deferred();
+    const secondToggle = deferred();
+    vi.mocked(toggleTodoListAction)
+      .mockReturnValueOnce(firstToggle.promise)
+      .mockReturnValueOnce(secondToggle.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { rerender } = render(<TodoTable todos={todos} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' })[0]);
+    await user.click(screen.getAllByRole('checkbox', { name: 'Mark Second Todo as active' })[0]);
+
+    secondToggle.resolve();
+    const updatedTodos = todos.map((todo) =>
+      todo.id === '2' ? { ...todo, completed: false } : todo
+    );
+    rerender(<TodoTable todos={updatedTodos} />);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Mark Second Todo as completed' }).every(
+          (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+        )
+      ).toBe(true)
+    );
+
+    firstToggle.reject(new Error('first toggle failed'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/Failed to update the task status/)
+    );
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark First Todo as completed' }).every(
+        (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+      )
+    ).toBe(true);
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Mark Second Todo as completed' }).every(
+        (checkbox) => checkbox.getAttribute('aria-checked') === 'false'
+      )
+    ).toBe(true);
+    expect(errorSpy).toHaveBeenCalledWith('Failed to update completion status', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
   it('searches over title and description and updates results immediately', async () => {
     render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
@@ -513,6 +702,30 @@ describe('TodoTable component', () => {
     expect(within(dialog).getByLabelText('Edit Title')).toHaveValue('First Todo');
     expect(within(dialog).getByLabelText('Edit Description')).toHaveValue('First todo body content.');
     expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'false');
+    expect(within(dialog).getByLabelText('Due Date')).toHaveValue('');
+    expect(within(dialog).getByRole('combobox', { name: 'Priority' })).toHaveValue('medium');
+  });
+
+  it('displays due date and priority on desktop and mobile, with legacy defaults', () => {
+    render(
+      <TodoTable
+        todos={[
+          {
+            ...todos[0],
+            dueDate: new Date('2026-03-08T00:00:00.000Z'),
+            priority: 'high',
+          },
+          todos[1],
+        ]}
+      />
+    );
+
+    expect(screen.getAllByText(/Mar 8, 2026/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/High/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/—/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Medium/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('columnheader', { name: 'Due Date' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Priority' })).toBeInTheDocument();
   });
 
   it('loads updated todo values when the edit dialog reopens', async () => {
@@ -615,6 +828,8 @@ describe('TodoTable component', () => {
       title: 'Latest First Todo',
       body: 'Latest todo description.',
       completed: true,
+      dueDate: new Date('2026-03-08T00:00:00.000Z'),
+      priority: 'high' as const,
     };
     rerender(<TodoTable todos={[updatedTodo, ...todos.slice(1)]} />);
     await user.click(screen.getAllByLabelText('Edit todo')[0]);
@@ -631,6 +846,8 @@ describe('TodoTable component', () => {
     expect(titleField).toHaveValue('Latest First Todo');
     expect(descriptionField).toHaveValue('Latest todo description.');
     expect(within(dialog).getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+    expect(within(dialog).getByLabelText('Due Date')).toHaveValue('2026-03-08');
+    expect(within(dialog).getByRole('combobox', { name: 'Priority' })).toHaveValue('high');
   });
 
   it('submits an explicitly cleared description as an empty string', async () => {
@@ -650,6 +867,8 @@ describe('TodoTable component', () => {
       title: 'First Todo',
       body: '',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     });
   });
 
@@ -671,6 +890,8 @@ describe('TodoTable component', () => {
       title: 'Renamed Todo',
       body: 'First todo body content.',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     });
   });
 
@@ -691,6 +912,8 @@ describe('TodoTable component', () => {
       title: 'First Todo',
       body: 'A brand new description.',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     });
   });
 
@@ -722,6 +945,8 @@ describe('TodoTable component', () => {
       title: 'Legacy Todo',
       body: 'short',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     });
     expect(
       screen.queryByText(/Body must be between 10 and 100 characters/)
@@ -737,6 +962,62 @@ describe('TodoTable component', () => {
     expect(await screen.findByText('Title')).toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getByLabelText('Due Date')).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveValue('medium');
+  });
+
+  it('submits date-only due dates and selected priorities from the add form', async () => {
+    render(<AddTodoForm />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /New ToDo/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    await user.type(within(dialog).getByLabelText('Title'), 'Date Task');
+    await user.type(within(dialog).getByLabelText('Due Date'), '2026-03-08');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Priority' }), 'high');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() =>
+      expect(createTodoListAction).toHaveBeenCalledWith({
+        title: 'Date Task',
+        body: undefined,
+        completed: false,
+        dueDate: '2026-03-08',
+        priority: 'high',
+      })
+    );
+  });
+
+  it('loads, updates, and clears due dates and priorities in the edit form', async () => {
+    const todo: ITodos = {
+      ...todos[0],
+      dueDate: new Date('2026-03-08T00:00:00.000Z'),
+      priority: 'high',
+    };
+    render(<TodoTable todos={[todo]} />);
+    const user = userEvent.setup();
+    await user.click(screen.getAllByLabelText('Edit todo')[0]);
+    const dialog = await screen.findByRole('dialog');
+    const dateField = within(dialog).getByLabelText('Due Date');
+    const priorityField = within(dialog).getByRole('combobox', { name: 'Priority' });
+
+    expect(dateField).toHaveValue('2026-03-08');
+    expect(priorityField).toHaveValue('high');
+
+    await user.clear(dateField);
+    await user.selectOptions(priorityField, 'low');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() =>
+      expect(updateTodoListAction).toHaveBeenCalledWith({
+        id: '1',
+        title: 'First Todo',
+        body: 'First todo body content.',
+        completed: false,
+        dueDate: '',
+        priority: 'low',
+      })
+    );
   });
 
   it('shows a fixed create error, preserves values, clears loading, and allows dismissal', async () => {
@@ -763,6 +1044,8 @@ describe('TodoTable component', () => {
       title: 'New Task Title',
       body: 'A useful task description.',
       completed: true,
+      dueDate: undefined,
+      priority: 'medium',
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -858,6 +1141,8 @@ describe('TodoTable component', () => {
       title: 'Updated First Todo',
       body: 'Updated task description.',
       completed: true,
+      dueDate: '',
+      priority: 'medium',
     });
     expect(submitButton).toBeDisabled();
     pending.reject(error);
@@ -917,6 +1202,8 @@ describe('TodoTable component', () => {
       title: 'Updated First Todo',
       body: 'First todo body content.',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

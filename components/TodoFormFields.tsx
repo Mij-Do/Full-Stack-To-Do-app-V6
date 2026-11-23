@@ -17,6 +17,8 @@ interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
   descriptionLabel?: string;
   titleId?: string;
   descriptionId?: string;
+  dueDateId?: string;
+  priorityId?: string;
 }
 
 export function TodoFormFields<TFieldValues extends FieldValues>({
@@ -25,6 +27,8 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
   descriptionLabel = 'Description',
   titleId = 'todo-title',
   descriptionId = 'todo-description',
+  dueDateId = 'todo-due-date',
+  priorityId = 'todo-priority',
 }: TodoFormFieldsProps<TFieldValues>) {
   return (
     <FieldGroup>
@@ -65,6 +69,46 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
                 <InputGroupText className="tabular-nums" />
               </InputGroupAddon>
             </InputGroup>
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+
+      <Controller
+        name={'dueDate' as Path<TFieldValues>}
+        control={control}
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor={dueDateId}>Due Date</FieldLabel>
+            <Input
+              {...field}
+              id={dueDateId}
+              type="date"
+              value={field.value ?? ''}
+              aria-invalid={fieldState.invalid}
+            />
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+
+      <Controller
+        name={'priority' as Path<TFieldValues>}
+        control={control}
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor={priorityId}>Priority</FieldLabel>
+            <select
+              {...field}
+              id={priorityId}
+              value={field.value ?? 'medium'}
+              aria-invalid={fieldState.invalid}
+              className="h-9 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
           </Field>
         )}

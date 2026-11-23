@@ -65,6 +65,30 @@ describe('createTodoListAction', () => {
         title: 'Valid title',
         body: undefined,
         completed: false,
+        dueDate: undefined,
+        priority: 'medium',
+        user_id: 'user_A',
+      },
+    });
+  });
+
+  it('stores due dates at UTC midnight and applies the supplied priority', async () => {
+    signIn('user_A');
+
+    await createTodoListAction({
+      title: 'Due date task',
+      completed: false,
+      dueDate: '2026-03-08',
+      priority: 'high',
+    });
+
+    expect(todoMock.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Due date task',
+        body: undefined,
+        completed: false,
+        dueDate: new Date('2026-03-08T00:00:00.000Z'),
+        priority: 'high',
         user_id: 'user_A',
       },
     });
@@ -175,6 +199,90 @@ describe('updateTodoListAction', () => {
       data: { title: 'Valid title', body: 'short', completed: false },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
+  });
+
+  it('updates a due date at UTC midnight and applies a supplied priority', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      dueDate: '2026-11-03',
+      priority: 'low',
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: {
+        title: 'Valid title',
+        body: undefined,
+        completed: false,
+        dueDate: new Date('2026-11-03T00:00:00.000Z'),
+        priority: 'low',
+      },
+    });
+  });
+
+  it('clears an explicitly empty due date without changing omitted priority', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      dueDate: '',
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: {
+        title: 'Valid title',
+        body: undefined,
+        completed: false,
+        dueDate: null,
+      },
+    });
+  });
+
+  it('updates only priority when dueDate is omitted', async () => {
+    signIn('user_A');
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: 'todo_owned_by_A',
+      title: 'Valid title',
+      completed: false,
+      priority: 'high',
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      data: {
+        title: 'Valid title',
+        body: undefined,
+        completed: false,
+        priority: 'high',
+      },
+    });
+  });
+
+  it('rejects invalid date-only values before updating the database', async () => {
+    signIn('user_A');
+
+    await expect(
+      updateTodoListAction({
+        id: 'todo_owned_by_A',
+        title: 'Valid title',
+        completed: false,
+        dueDate: '2026-02-30',
+      })
+    ).rejects.toThrow();
+
+    expect(todoMock.updateMany).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });
 

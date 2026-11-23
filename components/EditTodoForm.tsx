@@ -12,6 +12,7 @@ import { type FormEvent, useState } from 'react';
 import Spinner from './spinner';
 import { ITodos } from '@/interfaces';
 import { TodoFormFields } from './TodoFormFields';
+import { formatDateForInput } from '@/lib/utils';
 
 interface IProps {
   todo: ITodos;
@@ -25,6 +26,8 @@ const EditTodoForm = ({ todo }: IProps) => {
     title: todo.title,
     body: todo.body ?? '',
     completed: todo.completed,
+    dueDate: formatDateForInput(todo.dueDate),
+    priority: todo.priority ?? 'medium',
   };
 
   const form = useForm({
@@ -40,6 +43,8 @@ const EditTodoForm = ({ todo }: IProps) => {
         title: data.title,
         body: data.body,
         completed: data.completed,
+        dueDate: data.dueDate,
+        priority: data.priority,
       });
       setSubmitError(null);
       setOpen(false);

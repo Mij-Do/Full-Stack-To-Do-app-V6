@@ -23,13 +23,21 @@ const AddTodoForm = () => {
       title: '',
       body: '',
       completed: false,
+      dueDate: '',
+      priority: 'medium',
     },
   });
 
   const onSubmit = async (data: TodoFormValues) => {
     setLoading(true);
     try {
-      await createTodoListAction({ title: data.title, body: data.body, completed: data.completed });
+      await createTodoListAction({
+        title: data.title,
+        body: data.body,
+        completed: data.completed,
+        dueDate: data.dueDate,
+        priority: data.priority,
+      });
       form.reset();
       setSubmitError(null);
       setOpen(false);

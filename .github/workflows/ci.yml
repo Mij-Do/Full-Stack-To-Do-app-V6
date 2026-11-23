@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+        run: |
+          missing=false
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error title=Missing required secret::DATABASE_URL must be configured."
+            missing=true
+          fi
+          if [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error title=Missing required secret::NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be configured."
+            missing=true
+          fi
+          if [ "$missing" = true ]; then
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}

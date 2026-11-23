@@ -9,6 +9,7 @@ import {
   validateTaskToggle,
   validateTaskUpdate,
 } from '@/prisma/actions/validation';
+import { dateOnlyToUtcDate } from '@/lib/utils';
 
 const prisma = new PrismaClient();
 
@@ -22,7 +23,7 @@ const requireUserId = async (): Promise<string> => {
   return userId;
 };
 
-export const createTodoListAction = async (payload: { title: string; body?: string; completed: boolean }) => {
+export const createTodoListAction = async (payload: unknown) => {
   const userId = await requireUserId();
   const validated = validateTaskCreate(payload);
 
@@ -31,6 +32,8 @@ export const createTodoListAction = async (payload: { title: string; body?: stri
       title: validated.title,
       body: validated.body,
       completed: validated.completed,
+      dueDate: validated.dueDate ? dateOnlyToUtcDate(validated.dueDate) : undefined,
+      priority: validated.priority,
       user_id: userId,
     },
   });
@@ -71,6 +74,10 @@ export const updateTodoListAction = async (payload: unknown) => {
       // undefined means the field was omitted -> Prisma leaves it unchanged.
       body: validated.body === '' ? null : validated.body,
       completed: validated.completed,
+      ...(validated.dueDate !== undefined && {
+        dueDate: validated.dueDate === '' ? null : dateOnlyToUtcDate(validated.dueDate),
+      }),
+      ...(validated.priority !== undefined && { priority: validated.priority }),
     },
   });
 

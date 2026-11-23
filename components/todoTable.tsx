@@ -17,7 +17,8 @@ import { Label } from '@/components/ui/label';
 import { ITodos } from '@/interfaces';
 import { Badge } from './ui/badge';
 import TodosTableActions from './TodosTableActions';
-import { truncateDescription } from '@/lib/utils';
+import { formatDueDate, truncateDescription } from '@/lib/utils';
+import type { TaskPriority } from '@/lib/validations/task';
 import { deleteTodoListAction, toggleTodoListAction } from '@/prisma/actions/todo.action';
 
 interface IProps {
@@ -27,7 +28,8 @@ interface IProps {
 type TodoAction =
   | { type: 'delete'; id: string }
   | { type: 'toggle'; id: string; completed: boolean }
-  | { type: 'rollback'; nextState: ITodos[] };
+  | { type: 'rollback-toggle'; id: string; completed: boolean }
+  | { type: 'restore'; todo: ITodos; index: number };
 
 type StatusFilter = 'all' | 'active' | 'completed';
 
@@ -43,6 +45,18 @@ const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
 ];
+
+const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
+const PRIORITY_VARIANTS = {
+  low: 'secondary',
+  medium: 'outline',
+  high: 'destructive',
+} as const;
 
 const getCreatedAtTime = (value?: Date | string): number | null => {
   if (!value) return null;
@@ -77,8 +91,15 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
         return state.map((todo) =>
           todo.id === action.id ? { ...todo, completed: action.completed } : todo
         );
-      case 'rollback':
-        return action.nextState;
+      case 'rollback-toggle':
+        return state.map((todo) =>
+          todo.id === action.id ? { ...todo, completed: action.completed } : todo
+        );
+      case 'restore': {
+        if (state.some((todo) => todo.id === action.todo.id)) return state;
+        const index = Math.min(action.index, state.length);
+        return [...state.slice(0, index), action.todo, ...state.slice(index)];
+      }
       default:
         return state;
     }
@@ -105,8 +126,8 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
   const handleToggle = async (todo: ITodos) => {
     if (pendingIdsRef.current[todo.id]) return;
 
-    const previousTodos = todos;
-    const nextCompleted = !todo.completed;
+    const previousCompleted = todo.completed;
+    const nextCompleted = !previousCompleted;
     setError(null);
     setPending(todo.id, true);
 
@@ -119,7 +140,11 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
             await toggleTodoListAction({ id: todo.id, completed: nextCompleted });
           } catch (actionError) {
             console.error('Failed to update completion status', actionError);
-            updateTodos({ type: 'rollback', nextState: previousTodos });
+            updateTodos({
+              type: 'rollback-toggle',
+              id: todo.id,
+              completed: previousCompleted,
+            });
             setError('Failed to update the task status. The change was reverted, please try again.');
           } finally {
             resolve();
@@ -134,7 +159,9 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
   const handleDelete = async (id: string) => {
     if (pendingIdsRef.current[id]) return;
 
-    const previousTodos = todos;
+    const todoIndex = todos.findIndex((todo) => todo.id === id);
+    if (todoIndex === -1) return;
+    const deletedTodo = todos[todoIndex];
     setError(null);
     setPending(id, true);
 
@@ -147,7 +174,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
             await deleteTodoListAction({ id });
           } catch (actionError) {
             console.error('Failed to delete todo', actionError);
-            updateTodos({ type: 'rollback', nextState: previousTodos });
+            updateTodos({ type: 'restore', todo: deletedTodo, index: todoIndex });
             setError('Failed to delete the task. It is still in your list, please try again.');
           } finally {
             resolve();
@@ -171,6 +198,10 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
   });
 
   const visibleTodos = sortByCreatedAt(filteredTodos, sort);
+  const priorityBadge = (priority?: TaskPriority | null) => {
+    const value = priority ?? 'medium';
+    return <Badge variant={PRIORITY_VARIANTS[value]}>{PRIORITY_LABELS[value]}</Badge>;
+  };
 
   const activeCount = todos.filter((todo) => !todo.completed).length;
   const completedCount = todos.length - activeCount;
@@ -293,6 +324,12 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                   </div>
                   {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
                 </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <span>Due: {formatDueDate(todo.dueDate)}</span>
+                  <span className="flex items-center gap-2">
+                    Priority: {priorityBadge(todo.priority)}
+                  </span>
+                </div>
                 <div className="mt-4 flex justify-end border-t pt-3">
                   <TodosTableActions
                     todo={todo}
@@ -317,6 +354,8 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                   <TableHead>Title</TableHead>
                   <TableHead>Body</TableHead>
                   <TableHead>Completed</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Priority</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -330,6 +369,8 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
                     <TableCell>
                       {todo.completed ? <Badge>Completed</Badge> : <Badge variant="destructive">Uncompleted</Badge>}
                     </TableCell>
+                    <TableCell>{formatDueDate(todo.dueDate)}</TableCell>
+                    <TableCell>{priorityBadge(todo.priority)}</TableCell>
                     <TableCell className="text-right">
                       <TodosTableActions
                         todo={todo}
@@ -343,7 +384,7 @@ export default function TodoTable({ todos: initialTodos }: IProps) {
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={3}>Visible</TableCell>
+                  <TableCell colSpan={5}>Visible</TableCell>
                   <TableCell className="text-right">{filteredTodos.length} of {todos.length}</TableCell>
                 </TableRow>
               </TableFooter>

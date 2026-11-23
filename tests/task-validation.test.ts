@@ -4,6 +4,7 @@ import {
   taskToggleSchema,
   taskUpdateSchema,
   taskIdSchema,
+  taskPrioritySchema,
 } from '@/lib/validations/task';
 import { describe, expect, it } from 'vitest';
 
@@ -16,6 +17,43 @@ describe('task validation schemas', () => {
     };
 
     expect(() => taskCreateSchema.parse(payload)).not.toThrow();
+  });
+
+  it('defaults creation priority to medium and treats an empty due date as absent', () => {
+    expect(
+      taskCreateSchema.parse({
+        title: 'Write tests',
+        completed: false,
+        dueDate: '',
+      })
+    ).toMatchObject({ dueDate: undefined, priority: 'medium' });
+    expect(taskPrioritySchema.parse('high')).toBe('high');
+  });
+
+  it('accepts valid date-only values and rejects invalid calendar dates', () => {
+    expect(
+      taskCreateSchema.safeParse({
+        title: 'Write tests',
+        completed: false,
+        dueDate: '2024-02-29',
+      }).success
+    ).toBe(true);
+
+    for (const dueDate of ['2026-02-30', '2025-02-29', '2026-13-01', '2026-1-01']) {
+      expect(
+        taskCreateSchema.safeParse({ title: 'Write tests', completed: false, dueDate }).success
+      ).toBe(false);
+    }
+  });
+
+  it('rejects priority values outside the supported options', () => {
+    expect(
+      taskCreateSchema.safeParse({
+        title: 'Write tests',
+        completed: false,
+        priority: 'urgent',
+      }).success
+    ).toBe(false);
   });
 
   it('rejects invalid task creation payloads', () => {
@@ -117,6 +155,28 @@ describe('task validation schemas', () => {
     });
 
     expect(parsed.body).toBeUndefined();
+  });
+
+  it('keeps omitted due date and priority absent on update', () => {
+    const parsed = taskUpdateSchema.parse({
+      id: 'abc123',
+      title: 'Valid title',
+      completed: false,
+    });
+
+    expect(parsed.dueDate).toBeUndefined();
+    expect(parsed.priority).toBeUndefined();
+  });
+
+  it('preserves empty update due dates for explicit clearing', () => {
+    expect(
+      taskUpdateSchema.parse({
+        id: 'abc123',
+        title: 'Valid title',
+        completed: false,
+        dueDate: '',
+      }).dueDate
+    ).toBe('');
   });
 
   it('applies the same description rules on the edit form schema', () => {
