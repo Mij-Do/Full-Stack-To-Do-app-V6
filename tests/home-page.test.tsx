@@ -17,6 +17,7 @@ vi.mock('@/prisma/queries/todo.query', () => ({
   getUserListById: getListByIdMock,
   getUserTodoList: getTodosMock,
 }));
+vi.mock('@/lib/prisma', () => ({ prisma: {} }));
 
 import Home from '@/app/page';
 

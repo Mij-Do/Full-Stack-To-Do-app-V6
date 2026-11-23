@@ -85,6 +85,7 @@ const AddTodoForm = ({ lists = [], selectedListId = null }: AddTodoFormProps) =>
             lists={lists.filter((list) => !list.isArchived)}
             titleId="add-title"
             descriptionId="add-description"
+            completedId="add-completed"
           />
 
           {submitError && (

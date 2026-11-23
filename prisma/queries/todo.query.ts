@@ -1,7 +1,5 @@
-import { PrismaClient } from '../../generated/prisma';
+import { prisma } from '@/lib/prisma';
 import type { ITodoList } from '@/interfaces';
-
-const prisma = new PrismaClient();
 
 export type TodoSelection =
   | { kind: 'all' }

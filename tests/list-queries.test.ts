@@ -5,8 +5,8 @@ const { todoMock, todoListMock } = vi.hoisted(() => ({
   todoListMock: { findMany: vi.fn(), findFirst: vi.fn() },
 }));
 
-vi.mock('@/generated/prisma', () => ({
-  PrismaClient: vi.fn(() => ({ todo: todoMock, todoList: todoListMock })),
+vi.mock('@/lib/prisma', () => ({
+  prisma: { todo: todoMock, todoList: todoListMock },
 }));
 
 import { getUserListById, getUserLists, getUserTodoList } from '@/prisma/queries/todo.query';

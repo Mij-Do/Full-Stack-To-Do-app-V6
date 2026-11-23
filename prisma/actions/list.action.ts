@@ -1,8 +1,8 @@
 'use server';
 
-import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
-import { PrismaClient } from '../../generated/prisma';
+import { requireUserId } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import {
   validateListCreate,
   validateListIdAction,
@@ -13,14 +13,6 @@ import {
   LIST_NOT_EMPTY_MESSAGE,
   normalizeTransactionError,
 } from '@/prisma/actions/action-errors';
-
-const prisma = new PrismaClient();
-
-const requireUserId = async (): Promise<string> => {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
-  return userId;
-};
 
 export const createListAction = async (payload: unknown) => {
   const userId = await requireUserId();

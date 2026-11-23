@@ -91,6 +91,7 @@ const EditTodoForm = ({ todo, lists = [] }: IProps) => {
             descriptionLabel="Edit Description"
             titleId="edit-title"
             descriptionId="edit-description"
+            completedId="edit-completed"
           />
 
           {submitError && (

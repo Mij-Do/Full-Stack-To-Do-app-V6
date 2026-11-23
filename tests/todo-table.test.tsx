@@ -966,6 +966,7 @@ describe('TodoTable component', () => {
     expect(await screen.findByText('Title')).toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Completed' })).toBeInTheDocument();
     expect(screen.getByLabelText('Due Date')).toHaveValue('');
     expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveValue('medium');
   });

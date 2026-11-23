@@ -29,8 +29,8 @@ vi.mock('next/cache', () => ({
   revalidatePath: revalidatePathMock,
 }));
 
-vi.mock('@/generated/prisma', () => ({
-  PrismaClient: vi.fn(() => ({ ...prismaMock, todo: todoMock, todoList: todoListMock })),
+vi.mock('@/lib/prisma', () => ({
+  prisma: { ...prismaMock, todo: todoMock, todoList: todoListMock },
 }));
 
 import {
@@ -44,6 +44,9 @@ import { getUserTodoList } from '@/prisma/queries/todo.query';
 const signIn = (userId: string | null) => {
   authMock.mockResolvedValue({ userId });
 };
+
+const todoIdA = '0123456789abcdef01234567';
+const todoIdB = '1123456789abcdef01234567';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -130,7 +133,7 @@ describe('createTodoListAction', () => {
     });
   });
 
-  it('rejects assignment to unavailable Lists before creating a Todo', async () => {
+  it('rejects assignment to a foreign or archived List before creating a Todo', async () => {
     signIn('user_A');
     todoListMock.updateMany.mockResolvedValue({ count: 0 });
 
@@ -141,6 +144,14 @@ describe('createTodoListAction', () => {
         listId: '0123456789abcdef01234567',
       })
     ).rejects.toThrow('List not found');
+    expect(todoListMock.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: '0123456789abcdef01234567',
+        user_id: 'user_A',
+        isArchived: false,
+      },
+      data: { updatedAt: expect.any(Date) },
+    });
     expect(todoMock.create).not.toHaveBeenCalled();
   });
 
@@ -163,12 +174,23 @@ describe('createTodoListAction', () => {
 });
 
 describe('updateTodoListAction', () => {
+  it('rejects malformed Todo IDs before querying Prisma', async () => {
+    signIn('user_A');
+
+    await expect(
+      updateTodoListAction({ id: 'not-an-object-id', title: 'Valid title', completed: false })
+    ).rejects.toThrow();
+
+    expect(todoMock.findFirst).not.toHaveBeenCalled();
+    expect(todoMock.updateMany).not.toHaveBeenCalled();
+  });
+
   it('rejects unauthenticated callers without touching the database', async () => {
     signIn(null);
 
     await expect(
       updateTodoListAction({
-        id: 'todo_owned_by_B',
+        id: todoIdB,
         title: 'Valid title',
         completed: false,
       })
@@ -184,14 +206,14 @@ describe('updateTodoListAction', () => {
 
     await expect(
       updateTodoListAction({
-        id: 'todo_owned_by_B',
+        id: todoIdB,
         title: 'Valid title',
         completed: false,
       })
     ).rejects.toThrow('Todo not found');
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_B', user_id: 'user_A' },
+      where: { id: todoIdB, user_id: 'user_A' },
       data: { title: 'Valid title', body: undefined, completed: false },
     });
     expect(revalidatePathMock).not.toHaveBeenCalled();
@@ -202,13 +224,13 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: true,
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: { title: 'Valid title', body: undefined, completed: true },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
@@ -219,14 +241,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       body: '',
       completed: false,
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: { title: 'Valid title', body: null, completed: false },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
@@ -237,14 +259,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       body: 'A brand new description value.',
       completed: false,
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: { title: 'Valid title', body: 'A brand new description value.', completed: false },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
@@ -255,14 +277,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       body: 'short',
       completed: false,
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: { title: 'Valid title', body: 'short', completed: false },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
@@ -273,7 +295,7 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       dueDate: '2026-11-03',
@@ -281,7 +303,7 @@ describe('updateTodoListAction', () => {
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: {
         title: 'Valid title',
         body: undefined,
@@ -297,14 +319,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       dueDate: '',
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: {
         title: 'Valid title',
         body: undefined,
@@ -319,14 +341,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       priority: 'high',
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: {
         title: 'Valid title',
         body: undefined,
@@ -341,7 +363,7 @@ describe('updateTodoListAction', () => {
 
     await expect(
       updateTodoListAction({
-        id: 'todo_owned_by_A',
+        id: todoIdA,
         title: 'Valid title',
         completed: false,
         dueDate: '2026-02-30',
@@ -360,14 +382,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       listId: '0123456789abcdef01234567',
     });
 
     expect(todoMock.findFirst).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       select: { listId: true },
     });
     expect(todoListMock.findFirst).toHaveBeenCalledWith({
@@ -375,7 +397,7 @@ describe('updateTodoListAction', () => {
       select: { isArchived: true },
     });
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: expect.objectContaining({ listId: '0123456789abcdef01234567' }),
     });
   });
@@ -386,14 +408,14 @@ describe('updateTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
     await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       listId: null,
     });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: expect.objectContaining({ listId: null }),
     });
   });
@@ -405,12 +427,16 @@ describe('updateTodoListAction', () => {
 
     await expect(
       updateTodoListAction({
-        id: 'todo_owned_by_A',
+        id: todoIdA,
         title: 'Valid title',
         completed: false,
         listId: '0123456789abcdef01234567',
       })
     ).rejects.toThrow('List not found');
+    expect(todoListMock.findFirst).toHaveBeenCalledWith({
+      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
+      select: { isArchived: true },
+    });
     expect(todoMock.updateMany).not.toHaveBeenCalled();
   });
 
@@ -421,13 +447,37 @@ describe('updateTodoListAction', () => {
 
     await expect(
       updateTodoListAction({
-        id: 'todo_owned_by_A',
+        id: todoIdA,
         title: 'Valid title',
         completed: false,
         listId: '0123456789abcdef01234567',
       })
     ).rejects.toThrow('List not found');
+    expect(todoListMock.findFirst).toHaveBeenCalledWith({
+      where: { id: '0123456789abcdef01234567', user_id: 'user_A' },
+      select: { isArchived: true },
+    });
     expect(todoMock.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows editing a Todo that remains assigned to its archived List', async () => {
+    signIn('user_A');
+    todoMock.findFirst.mockResolvedValue({ listId: '0123456789abcdef01234567' });
+    todoListMock.findFirst.mockResolvedValue({ isArchived: true });
+    todoMock.updateMany.mockResolvedValue({ count: 1 });
+
+    await updateTodoListAction({
+      id: todoIdA,
+      title: 'Updated title',
+      completed: false,
+      listId: '0123456789abcdef01234567',
+    });
+
+    expect(todoMock.updateMany).toHaveBeenCalledWith({
+      where: { id: todoIdA, user_id: 'user_A' },
+      data: expect.objectContaining({ title: 'Updated title', listId: '0123456789abcdef01234567' }),
+    });
+    expect(todoListMock.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns a safe error if a List-related update transaction fails', async () => {
@@ -435,7 +485,7 @@ describe('updateTodoListAction', () => {
     prismaMock.$transaction.mockRejectedValue(new Error('MongoServerError: private connection details'));
 
     const failure = await updateTodoListAction({
-      id: 'todo_owned_by_A',
+      id: todoIdA,
       title: 'Valid title',
       completed: false,
       listId: null,
@@ -453,11 +503,19 @@ describe('updateTodoListAction', () => {
 });
 
 describe('toggleTodoListAction', () => {
+  it('rejects malformed Todo IDs before updating Prisma', async () => {
+    signIn('user_A');
+
+    await expect(toggleTodoListAction({ id: 'not-an-object-id', completed: true })).rejects.toThrow();
+
+    expect(todoMock.updateMany).not.toHaveBeenCalled();
+  });
+
   it('rejects unauthenticated callers without touching the database', async () => {
     signIn(null);
 
     await expect(
-      toggleTodoListAction({ id: 'todo_owned_by_B', completed: true })
+      toggleTodoListAction({ id: todoIdB, completed: true })
     ).rejects.toThrow('Unauthorized');
 
     expect(todoMock.updateMany).not.toHaveBeenCalled();
@@ -469,11 +527,11 @@ describe('toggleTodoListAction', () => {
     todoMock.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      toggleTodoListAction({ id: 'todo_owned_by_B', completed: true })
+      toggleTodoListAction({ id: todoIdB, completed: true })
     ).rejects.toThrow('Todo not found');
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_B', user_id: 'user_A' },
+      where: { id: todoIdB, user_id: 'user_A' },
       data: { completed: true },
     });
     expect(revalidatePathMock).not.toHaveBeenCalled();
@@ -483,10 +541,10 @@ describe('toggleTodoListAction', () => {
     signIn('user_A');
     todoMock.updateMany.mockResolvedValue({ count: 1 });
 
-    await toggleTodoListAction({ id: 'todo_owned_by_A', completed: false });
+    await toggleTodoListAction({ id: todoIdA, completed: false });
 
     expect(todoMock.updateMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
       data: { completed: false },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
@@ -494,10 +552,18 @@ describe('toggleTodoListAction', () => {
 });
 
 describe('deleteTodoListAction', () => {
+  it('rejects malformed Todo IDs before deleting from Prisma', async () => {
+    signIn('user_A');
+
+    await expect(deleteTodoListAction({ id: 'not-an-object-id' })).rejects.toThrow();
+
+    expect(todoMock.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('rejects unauthenticated callers without touching the database', async () => {
     signIn(null);
 
-    await expect(deleteTodoListAction({ id: 'todo_owned_by_B' })).rejects.toThrow(
+    await expect(deleteTodoListAction({ id: todoIdB })).rejects.toThrow(
       'Unauthorized'
     );
 
@@ -509,12 +575,12 @@ describe('deleteTodoListAction', () => {
     signIn('user_A');
     todoMock.deleteMany.mockResolvedValue({ count: 0 });
 
-    await expect(deleteTodoListAction({ id: 'todo_owned_by_B' })).rejects.toThrow(
+    await expect(deleteTodoListAction({ id: todoIdB })).rejects.toThrow(
       'Todo not found'
     );
 
     expect(todoMock.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_B', user_id: 'user_A' },
+      where: { id: todoIdB, user_id: 'user_A' },
     });
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
@@ -523,10 +589,10 @@ describe('deleteTodoListAction', () => {
     signIn('user_A');
     todoMock.deleteMany.mockResolvedValue({ count: 1 });
 
-    await deleteTodoListAction({ id: 'todo_owned_by_A' });
+    await deleteTodoListAction({ id: todoIdA });
 
     expect(todoMock.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'todo_owned_by_A', user_id: 'user_A' },
+      where: { id: todoIdA, user_id: 'user_A' },
     });
     expect(revalidatePathMock).toHaveBeenCalledWith('/');
   });

@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
-import { auth } from '@clerk/nextjs/server';
-import { PrismaClient } from '../../generated/prisma';
+import { requireUserId } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import {
   validateTaskCreate,
   validateTaskDelete,
@@ -11,18 +11,6 @@ import {
 } from '@/prisma/actions/validation';
 import { dateOnlyToUtcDate } from '@/lib/utils';
 import { ActionDomainError, normalizeTransactionError } from '@/prisma/actions/action-errors';
-
-const prisma = new PrismaClient();
-
-const requireUserId = async (): Promise<string> => {
-  const { userId } = await auth();
-
-  if (!userId) {
-    throw new Error('Unauthorized');
-  }
-
-  return userId;
-};
 
 export const createTodoListAction = async (payload: unknown) => {
   const userId = await requireUserId();

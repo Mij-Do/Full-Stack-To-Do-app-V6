@@ -5,10 +5,13 @@ import {
   taskUpdateSchema,
   taskIdSchema,
   taskPrioritySchema,
+  mongoObjectIdSchema,
   todoListIdSchema,
 } from '@/lib/validations/task';
 import { listCreateSchema, listIdActionSchema, listRenameSchema } from '@/lib/validations/list';
 import { describe, expect, it } from 'vitest';
+
+const todoId = '0123456789abcdef01234567';
 
 describe('task validation schemas', () => {
   it('passes valid task creation payload', () => {
@@ -35,6 +38,14 @@ describe('task validation schemas', () => {
       expect(listIdActionSchema.safeParse({ id: 'not-an-object-id' }).success).toBe(false);
       expect(listRenameSchema.safeParse({ id: 'not-an-object-id', name: 'Valid' }).success).toBe(false);
     });
+  });
+
+  it('accepts valid MongoDB ObjectIds and rejects malformed values', () => {
+    expect(mongoObjectIdSchema.parse(todoId)).toBe(todoId);
+
+    for (const id of ['abc123', '0123456789abcdef0123456g', `${todoId}\n`]) {
+      expect(mongoObjectIdSchema.safeParse(id).success).toBe(false);
+    }
   });
 
   it('defaults creation priority to medium and treats an empty due date as absent', () => {
@@ -82,7 +93,7 @@ describe('task validation schemas', () => {
 
     expect(
       taskUpdateSchema.safeParse({
-        id: 'abc123',
+        id: todoId,
         title: 'Updated title',
         completed: false,
         dueDate: null,
@@ -127,17 +138,17 @@ describe('task validation schemas', () => {
   });
 
   it('passes valid toggle payload', () => {
-    const payload = { id: 'abc123', completed: true };
+    const payload = { id: todoId, completed: true };
     expect(() => taskToggleSchema.parse(payload)).not.toThrow();
   });
 
   it('rejects toggle payload with missing values', () => {
-    expect(() => taskToggleSchema.parse({ id: 'abc123' })).toThrow();
+    expect(() => taskToggleSchema.parse({ id: todoId })).toThrow();
   });
 
   it('passes valid update payload', () => {
     const payload = {
-      id: 'abc123',
+      id: todoId,
       title: 'Updated title',
       body: 'Updated body string is long enough.',
       completed: true,
@@ -149,7 +160,7 @@ describe('task validation schemas', () => {
   it('rejects invalid update payloads', () => {
     expect(() =>
       taskUpdateSchema.parse({
-        id: 'abc123',
+        id: todoId,
         title: 'No',
         body: 'Long enough body text.',
         completed: false,
@@ -158,7 +169,7 @@ describe('task validation schemas', () => {
 
     expect(() =>
       taskUpdateSchema.parse({
-        id: 'abc123',
+        id: todoId,
         title: 'Valid title',
         body: 'x'.repeat(101),
         completed: false,
@@ -168,7 +179,7 @@ describe('task validation schemas', () => {
 
   it('keeps an explicitly cleared description as an empty string on update', () => {
     const parsed = taskUpdateSchema.parse({
-      id: 'abc123',
+      id: todoId,
       title: 'Valid title',
       body: '',
       completed: false,
@@ -179,7 +190,7 @@ describe('task validation schemas', () => {
 
   it('allows legacy descriptions shorter than 10 characters on update', () => {
     const parsed = taskUpdateSchema.parse({
-      id: 'abc123',
+      id: todoId,
       title: 'Valid title',
       body: 'short',
       completed: false,
@@ -187,13 +198,13 @@ describe('task validation schemas', () => {
 
     expect(parsed.body).toBe('short');
     expect(() =>
-      taskUpdateSchema.parse({ id: 'abc123', title: 'Valid title', body: 'short', completed: false })
+      taskUpdateSchema.parse({ id: todoId, title: 'Valid title', body: 'short', completed: false })
     ).not.toThrow();
   });
 
   it('treats an omitted description as undefined on update', () => {
     const parsed = taskUpdateSchema.parse({
-      id: 'abc123',
+      id: todoId,
       title: 'Valid title',
       completed: true,
     });
@@ -203,7 +214,7 @@ describe('task validation schemas', () => {
 
   it('keeps omitted due date and priority absent on update', () => {
     const parsed = taskUpdateSchema.parse({
-      id: 'abc123',
+      id: todoId,
       title: 'Valid title',
       completed: false,
     });
@@ -215,7 +226,7 @@ describe('task validation schemas', () => {
   it('preserves empty update due dates for explicit clearing', () => {
     expect(
       taskUpdateSchema.parse({
-        id: 'abc123',
+        id: todoId,
         title: 'Valid title',
         completed: false,
         dueDate: '',
@@ -239,6 +250,6 @@ describe('task validation schemas', () => {
   });
 
   it('passes valid delete payload', () => {
-    expect(() => taskIdSchema.parse({ id: 'abc123' })).not.toThrow();
+    expect(() => taskIdSchema.parse({ id: todoId })).not.toThrow();
   });
 });

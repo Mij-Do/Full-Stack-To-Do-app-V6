@@ -11,20 +11,19 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      DATABASE_URL: mongodb://127.0.0.1:27017/todo-ci-placeholder
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Fork PRs cannot access repository secrets; their build uses a synthetic public key.
       - name: Validate required secrets
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: |
           missing=false
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error title=Missing required secret::DATABASE_URL must be configured."
-            missing=true
-          fi
           if [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
             echo "::error title=Missing required secret::NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be configured."
             missing=true
@@ -45,8 +44,6 @@ jobs:
 
       - name: Generate Prisma Client
         run: npx prisma generate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Lint
         run: npm run lint
@@ -60,5 +57,5 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Synthetic public key for fork-only build checks; it is not backed by a Clerk instance.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'pk_test_Y2ktb25seS1wbGFjZWhvbGRlci5jbGVyay5hY2NvdW50cy5kZXYk' || secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}

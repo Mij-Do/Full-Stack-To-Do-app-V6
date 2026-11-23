@@ -14,12 +14,12 @@ const { authMock, revalidatePathMock, todoListMock, todoMock, prismaMock } = vi.
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }));
 vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
-vi.mock('@/generated/prisma', () => ({
-  PrismaClient: vi.fn(() => ({
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
     ...prismaMock,
     todoList: todoListMock,
     todo: todoMock,
-  })),
+  },
 }));
 
 import {
@@ -60,10 +60,19 @@ describe('List actions', () => {
     });
   });
 
-  it('rejects unauthenticated callers before database access', async () => {
+  it('rejects unauthenticated callers for every mutation before database access', async () => {
     authMock.mockResolvedValue({ userId: null });
     await expect(createListAction({ name: 'Work' })).rejects.toThrow('Unauthorized');
+    await expect(renameListAction({ id: validId, name: 'Renamed' })).rejects.toThrow('Unauthorized');
+    await expect(archiveListAction({ id: validId })).rejects.toThrow('Unauthorized');
+    await expect(deleteEmptyListAction({ id: validId })).rejects.toThrow('Unauthorized');
+
     expect(todoListMock.create).not.toHaveBeenCalled();
+    expect(todoListMock.updateMany).not.toHaveBeenCalled();
+    expect(todoListMock.deleteMany).not.toHaveBeenCalled();
+    expect(todoMock.count).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
   it('renames and archives only a List owned by the authenticated user', async () => {
@@ -102,6 +111,19 @@ describe('List actions', () => {
 
     await expect(deleteEmptyListAction({ id: validId })).rejects.toThrow(LIST_NOT_EMPTY_MESSAGE);
     expect(todoMock.count).toHaveBeenCalledWith({ where: { listId: validId } });
+    expect(todoListMock.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('does not inspect or delete a List owned by another user', async () => {
+    todoListMock.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(deleteEmptyListAction({ id: validId })).rejects.toThrow('List not found');
+
+    expect(todoListMock.updateMany).toHaveBeenCalledWith({
+      where: { id: validId, user_id: 'owner_A' },
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(todoMock.count).not.toHaveBeenCalled();
     expect(todoListMock.deleteMany).not.toHaveBeenCalled();
   });
 

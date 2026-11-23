@@ -3,7 +3,11 @@ import { z } from 'zod';
 export const taskPrioritySchema = z.enum(['low', 'medium', 'high']);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
-export const todoListIdSchema = z.string().regex(/^[\da-f]{24}$/i, 'Invalid List ID.');
+const isMongoObjectId = (value: string) =>
+  value.length === 24 && /^[\da-f]{24}$/i.test(value);
+
+export const mongoObjectIdSchema = z.string().refine(isMongoObjectId, 'Invalid MongoDB ObjectId.');
+export const todoListIdSchema = z.string().refine(isMongoObjectId, 'Invalid List ID.');
 
 const isValidDateOnly = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -62,7 +66,7 @@ export const taskCreateSchema = taskBaseSchema.extend({
   listId: todoListIdSchema.nullable().optional(),
 });
 export const taskUpdateSchema = taskBaseSchema.extend({
-  id: z.string(),
+  id: mongoObjectIdSchema,
   body: taskUpdateBodySchema,
   dueDate: taskUpdateDueDateSchema,
   priority: taskPrioritySchema.optional(),
@@ -75,11 +79,11 @@ export const taskEditFormSchema = taskUpdateSchema
   .extend({ listId: todoListFormIdSchema });
 export const formSchema = taskCreateSchema.extend({ listId: todoListFormIdSchema });
 export const taskToggleSchema = z.object({
-  id: z.string(),
+  id: mongoObjectIdSchema,
   completed: z.boolean(),
 });
 export const taskIdSchema = z.object({
-  id: z.string(),
+  id: mongoObjectIdSchema,
 });
 
 export type TaskFormValues = z.infer<typeof formSchema>;

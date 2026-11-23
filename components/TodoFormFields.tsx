@@ -19,6 +19,7 @@ interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
   descriptionLabel?: string;
   titleId?: string;
   descriptionId?: string;
+  completedId?: string;
   dueDateId?: string;
   priorityId?: string;
 }
@@ -30,6 +31,7 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
   descriptionLabel = 'Description',
   titleId = 'todo-title',
   descriptionId = 'todo-description',
+  completedId = 'todo-completed',
   dueDateId = 'todo-due-date',
   priorityId = 'todo-priority',
 }: TodoFormFieldsProps<TFieldValues>) {
@@ -149,10 +151,11 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
           <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
             <Checkbox
               checked={value}
+              aria-labelledby={`${completedId}-label`}
               onCheckedChange={onChange}
               className="after:-inset-y-4 sm:after:-inset-y-2"
             />
-            <FieldLabel>Completed</FieldLabel>
+            <FieldLabel id={`${completedId}-label`}>Completed</FieldLabel>
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
           </Field>
         )}
