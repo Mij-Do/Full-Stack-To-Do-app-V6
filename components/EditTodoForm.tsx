@@ -6,6 +6,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from '@/components/ui/field';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import type { z } from 'zod';
 import { taskEditFormSchema } from '@/schema';
 import { stopTodoRecurrenceAction, updateTodoAction } from '@/prisma/actions/todo.action';
 import { type FormEvent, useRef, useState } from 'react';
@@ -20,6 +21,9 @@ import { useToast } from '@/components/ui/toast-provider';
 interface IProps {
   todo: ITodos;
 }
+
+type EditTodoFormInput = z.input<typeof taskEditFormSchema>;
+type EditTodoFormOutput = z.output<typeof taskEditFormSchema>;
 
 const EditTodoForm = ({ todo }: IProps) => {
   const toast = useToast();
@@ -36,12 +40,12 @@ const EditTodoForm = ({ todo }: IProps) => {
     recurrenceInterval: todo.recurrence?.interval ?? 1,
   };
 
-  const form = useForm({
+  const form = useForm<EditTodoFormInput, undefined, EditTodoFormOutput>({
     resolver: zodResolver(taskEditFormSchema),
     defaultValues: currentTodoValues,
   });
-  const recurrenceFrequency = form.watch('recurrenceFrequency');
-  const recurrenceInterval = form.watch('recurrenceInterval');
+  const recurrenceFrequency = form.watch('recurrenceFrequency') ?? 'none';
+  const recurrenceInterval = form.watch('recurrenceInterval') ?? 1;
 
   const normalizeEditableValues = (values: {
     title: string;
@@ -61,7 +65,7 @@ const EditTodoForm = ({ todo }: IProps) => {
       : 1,
   });
 
-  const onSubmit = async (data: ReturnType<typeof taskEditFormSchema.parse>) => {
+  const onSubmit = async (data: EditTodoFormOutput) => {
     if (submittingRef.current) return;
     if (
       JSON.stringify(normalizeEditableValues(data)) ===

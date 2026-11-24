@@ -4,7 +4,9 @@ import ErrorBoundary from '@/app/error';
 import Loading from '@/app/loading';
 import TodoDashboardMetrics from '@/components/TodoDashboardMetrics';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach((): void => {
+  vi.restoreAllMocks();
+});
 
 describe('Todo dashboard UI', () => {
   it('shows all metrics, active due-date subset context, and the empty state', () => {

@@ -121,8 +121,8 @@ const AddTodoForm = () => {
 
           <RecurrenceFields
             idPrefix="add"
-            frequency={recurrenceFrequency}
-            interval={recurrenceInterval}
+            frequency={recurrenceFrequency ?? 'none'}
+            interval={recurrenceInterval ?? 1}
             onFrequencyChange={(value: RecurrenceChoice) => form.setValue('recurrenceFrequency', value, { shouldValidate: true })}
             onIntervalChange={(value) => form.setValue('recurrenceInterval', value, { shouldValidate: true })}
             intervalError={form.formState.errors.recurrenceInterval?.message}

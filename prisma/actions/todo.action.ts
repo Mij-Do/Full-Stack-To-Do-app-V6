@@ -11,7 +11,7 @@ import {
   validateTaskUpdate,
 } from '@/prisma/actions/validation';
 import { dateOnlyToUtcDate } from '@/lib/utils';
-import { MAX_RECURRENCE_INTERVAL, type RecurrenceChoice, type RecurrenceFrequency } from '@/lib/validations/task';
+import { MAX_RECURRENCE_INTERVAL, type RecurrenceChoice } from '@/lib/validations/task';
 import { ActionDomainError, runWithPersistenceError } from '@/prisma/actions/action-errors';
 import { assertTopLevelTodoId, createNextOccurrence, toggleTodoInTransaction, type RecurrenceSource } from '@/prisma/actions/todo-action-internals';
 

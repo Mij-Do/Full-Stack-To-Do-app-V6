@@ -10,7 +10,10 @@ const EMPTY_SUBTASKS: ITodoSubtask[] = [];
 
 export default function SubtaskChecklist({ todoId, initialSubtasks = EMPTY_SUBTASKS }: { todoId: string; initialSubtasks?: ITodoSubtask[] }) {
   const [subtasks, setSubtasks] = useState(initialSubtasks);
-  useEffect(() => setSubtasks(initialSubtasks), [initialSubtasks]);
+  useEffect(() => {
+    const refresh = window.setTimeout(() => setSubtasks(initialSubtasks), 0);
+    return () => window.clearTimeout(refresh);
+  }, [initialSubtasks]);
   const [expanded, setExpanded] = useState(true);
   const [title, setTitle] = useState('');
   const [editing, setEditing] = useState<string | null>(null);

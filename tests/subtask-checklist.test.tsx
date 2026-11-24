@@ -8,7 +8,9 @@ vi.mock('@/prisma/actions/subtask.action', () => ({
 }));
 
 describe('SubtaskChecklist', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach((): void => {
+    vi.clearAllMocks();
+  });
 
   it('shows empty state, pending status, and prevents duplicate submissions', async () => {
     let resolve!: (value: { id: string; todoId: string; title: string; completed: boolean; createdAt: Date }) => void;
@@ -100,6 +102,7 @@ describe('SubtaskChecklist', () => {
     fireEvent.submit(screen.getByRole('textbox', { name: 'Edit subtask title' }).closest('form')!);
     await waitFor(() => expect(screen.getByText('Revised')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Delete Revised' }));
+    await waitFor(() => expect(screen.queryByText('Revised')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Delete Review' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /0 of 0 completed · 0%/ })).toBeInTheDocument());
     expect(toggleSubtaskAction).toHaveBeenCalledWith({ todoId: 'parent-id', id: 'child-id', completed: true });

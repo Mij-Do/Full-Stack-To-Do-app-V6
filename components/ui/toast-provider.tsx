@@ -77,6 +77,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ))}
         <ToastPrimitive.Viewport
           label="Notifications"
+          role="region"
+          aria-label="Notifications"
+          aria-live="polite"
           className={cn(
             'fixed top-4 left-1/2 z-[100] flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 flex-col gap-2 overflow-y-auto outline-none',
             'sm:left-auto sm:right-4 sm:translate-x-0',

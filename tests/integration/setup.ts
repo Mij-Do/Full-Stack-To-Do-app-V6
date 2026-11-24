@@ -15,8 +15,11 @@ try {
 } catch {
   environmentLoadFailed = true;
 } finally {
-  if (hadNodeEnv) process.env.NODE_ENV = originalNodeEnv;
-  else delete process.env.NODE_ENV;
+  if (hadNodeEnv) {
+    Reflect.set(process.env, 'NODE_ENV', originalNodeEnv);
+  } else {
+    Reflect.deleteProperty(process.env, 'NODE_ENV');
+  }
 }
 if (environmentLoadFailed) {
   throw new Error('Could not resolve application environment configuration safely.');

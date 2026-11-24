@@ -10,8 +10,7 @@ import { subtaskCreateSchema, subtaskDeleteSchema, subtaskToggleSchema, subtaskU
 export const createSubtaskAction = async (payload: unknown) => {
   const userId = await requireUserId();
   const input = subtaskCreateSchema.parse(payload);
-  let created: { id: string; todoId: string; title: string; completed: boolean; createdAt: Date };
-  created = await runWithPersistenceError(async () => {
+  const created: { id: string; todoId: string; title: string; completed: boolean; createdAt: Date } = await runWithPersistenceError(async () => {
     await assertTopLevelTodoId(input.todoId, userId);
     return prisma.$transaction(async (transaction) => {
       const parent = await transaction.todo.findFirst({ where: { id: input.todoId, user_id: userId }, select: { id: true, completed: true } });

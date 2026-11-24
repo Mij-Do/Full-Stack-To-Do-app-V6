@@ -360,6 +360,7 @@ describe('TodoTable component', () => {
     vi.mocked(toggleTodoAction)
       .mockReturnValueOnce(firstToggle.promise)
       .mockReturnValueOnce(secondToggle.promise);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<TodoTable todos={todos} />);
     const user = userEvent.setup();
@@ -998,13 +999,15 @@ describe('TodoTable component', () => {
     await user.click(screen.getAllByLabelText('Edit todo')[0]);
     expect(await screen.findByText('Edit Description')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Description')).toHaveValue('short');
+    await user.clear(screen.getByLabelText('Edit Title'));
+    await user.type(screen.getByLabelText('Edit Title'), 'Legacy Todo Updated');
 
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
     await waitFor(() => expect(updateTodoAction).toHaveBeenCalledTimes(1));
     expect(updateTodoAction).toHaveBeenCalledWith({
       id: 'legacy',
-      title: 'Legacy Todo',
+      title: 'Legacy Todo Updated',
       body: 'short',
       completed: false,
       dueDate: '',
