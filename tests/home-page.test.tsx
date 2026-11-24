@@ -24,14 +24,24 @@ const getPageChildren = async () => {
   return Children.toArray((page as ReactElement<{ children: ReactNode }>).props.children);
 };
 
-describe('unified Todos page', () => {
+describe('Dashboard and unified Todos page', () => {
   it('loads every authenticated user Todo into one view', async () => {
-    getTodosMock.mockResolvedValue([{ id: 'todo-1' }]);
+    getTodosMock.mockResolvedValue([{ id: 'todo-1', title: 'Owned Todo', completed: false, dueDate: null }]);
     const children = await getPageChildren();
-    const table = children[1] as ReactElement<{ todos: { id: string }[] }>;
+    const dashboard = children[1] as ReactElement<{ metrics: { total: number; active: number; completionRate: number } }>;
+    const listSection = children[2] as ReactElement<{ children: ReactNode }>;
+    const listChildren = Children.toArray(listSection.props.children);
+    const table = listChildren[1] as ReactElement<{ todos: { id: string }[] }>;
 
     expect(getTodosMock).toHaveBeenCalledWith('owner_A');
-    expect(table.props.todos).toEqual([{ id: 'todo-1' }]);
+    expect(dashboard.props.metrics).toMatchObject({ total: 1, active: 1, completionRate: 0 });
+    expect(table.props.todos).toEqual([{ id: 'todo-1', title: 'Owned Todo', completed: false, dueDate: null }]);
+  });
+
+  it('propagates a failed owner-scoped Todo load to the route error boundary', async () => {
+    getTodosMock.mockRejectedValue(new Error('database unavailable'));
+    await expect(getPageChildren()).rejects.toThrow('database unavailable');
+    expect(getTodosMock).toHaveBeenCalledWith('owner_A');
   });
 
   it('redirects unauthenticated visitors before loading Todos', async () => {

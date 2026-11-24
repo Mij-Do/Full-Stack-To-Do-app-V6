@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { ModeToggle } from '@/components/ModeToggle';
+import { ToastProvider } from '@/components/ui/toast-provider';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -26,15 +27,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-full bg-background text-foreground" suppressHydrationWarning>
         <ClerkProvider>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-            <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
-              <header className="flex items-center justify-end gap-3 pb-4">
-                <Show when="signed-in">
-                  <ModeToggle />
-                  <UserButton />
-                </Show>
-              </header>
-              {children}
-            </div>
+            <ToastProvider>
+              <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+                <header className="flex items-center justify-end gap-3 pb-4">
+                  <Show when="signed-in">
+                    <ModeToggle />
+                    <UserButton />
+                  </Show>
+                </header>
+                {children}
+              </div>
+            </ToastProvider>
           </ThemeProvider>
         </ClerkProvider>
       </body>

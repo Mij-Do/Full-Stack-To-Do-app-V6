@@ -19,6 +19,12 @@ enum TodoType {
   withSubtasks
 }
 
+enum RecurrenceFrequency {
+  daily
+  weekly
+  monthly
+}
+
 model Todo {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   title     String
@@ -30,8 +36,25 @@ model Todo {
   priority TaskPriority? @default(medium)
   todoType TodoType @default(standalone)
   subtasks  TodoSubtask[]
+  recurrenceSeriesId String? @db.ObjectId
+  recurrenceSeries TodoRecurrence? @relation(fields: [recurrenceSeriesId], references: [id])
 
   @@index([user_id, createdAt])
+  @@index([recurrenceSeriesId])
+}
+
+model TodoRecurrence {
+  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  user_id       String
+  frequency     RecurrenceFrequency
+  interval      Int
+  active        Boolean            @default(true)
+  currentTodoId String?            @db.ObjectId
+  anchorDay     Int?
+  createdAt     DateTime           @default(now())
+  todos         Todo[]
+
+  @@index([user_id, active])
 }
 
 model TodoSubtask {

@@ -9,7 +9,6 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 
 interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
   control: Control<TFieldValues>;
@@ -17,11 +16,9 @@ interface TodoFormFieldsProps<TFieldValues extends FieldValues> {
   descriptionLabel?: string;
   titleId?: string;
   descriptionId?: string;
-  completedId?: string;
-  onCompletedChange?: () => void;
-  completedDisabled?: boolean;
   dueDateId?: string;
   priorityId?: string;
+  dueDateRequired?: boolean;
 }
 
 export function TodoFormFields<TFieldValues extends FieldValues>({
@@ -30,11 +27,9 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
   descriptionLabel = 'Description',
   titleId = 'todo-title',
   descriptionId = 'todo-description',
-  completedId = 'todo-completed',
-  onCompletedChange,
-  completedDisabled = false,
   dueDateId = 'todo-due-date',
   priorityId = 'todo-priority',
+  dueDateRequired = false,
 }: TodoFormFieldsProps<TFieldValues>) {
   return (
     <FieldGroup>
@@ -90,6 +85,7 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
               {...field}
               id={dueDateId}
               type="date"
+              required={dueDateRequired}
               value={field.value ?? ''}
               aria-invalid={fieldState.invalid}
             />
@@ -120,26 +116,6 @@ export function TodoFormFields<TFieldValues extends FieldValues>({
         )}
       />
 
-      <Controller
-        name={'completed' as Path<TFieldValues>}
-        control={control}
-        render={({ field: { onChange, value }, fieldState }) => (
-          <Field className="flex items-center gap-2" data-invalid={fieldState.invalid}>
-            <Checkbox
-              checked={value}
-              disabled={completedDisabled}
-              aria-labelledby={`${completedId}-label`}
-              onCheckedChange={(checked) => {
-                onChange(checked);
-                onCompletedChange?.();
-              }}
-              className="after:-inset-y-4 sm:after:-inset-y-2"
-            />
-            <FieldLabel id={`${completedId}-label`}>Completed</FieldLabel>
-            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-          </Field>
-        )}
-      />
     </FieldGroup>
   );
 }

@@ -4,6 +4,12 @@ export const taskPrioritySchema = z.enum(['low', 'medium', 'high']);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 export const todoTypeSchema = z.enum(['standalone', 'withSubtasks']);
 export type TodoType = z.infer<typeof todoTypeSchema>;
+export const recurrenceFrequencySchema = z.enum(['daily', 'weekly', 'monthly']);
+export type RecurrenceFrequency = z.infer<typeof recurrenceFrequencySchema>;
+export const recurrenceChoiceSchema = z.enum(['none', 'daily', 'weekly', 'monthly']);
+export type RecurrenceChoice = z.infer<typeof recurrenceChoiceSchema>;
+export const MAX_RECURRENCE_INTERVAL = 365;
+const recurrenceIntervalSchema = z.number().int().min(1).max(MAX_RECURRENCE_INTERVAL, `Interval must be between 1 and ${MAX_RECURRENCE_INTERVAL}.`);
 
 const isMongoObjectId = (value: string) =>
   value.length === 24 && /^[\da-f]{24}$/i.test(value);
@@ -66,17 +72,39 @@ export const taskCreateSchema = taskBaseSchema.extend({
   priority: taskPrioritySchema.default('medium'),
   todoType: todoTypeSchema.default('standalone'),
   initialSubtasks: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
+  recurrenceFrequency: recurrenceChoiceSchema.default('none'),
+  recurrenceInterval: recurrenceIntervalSchema.default(1),
+}).superRefine((value, context) => {
+  if (value.recurrenceFrequency !== 'none' && !value.dueDate) {
+    context.addIssue({ code: 'custom', path: ['dueDate'], message: 'A due date is required for recurring Todos.' });
+  }
+  if (value.recurrenceFrequency !== 'none' && value.completed) {
+    context.addIssue({ code: 'custom', path: ['completed'], message: 'A recurring Todo must start incomplete.' });
+  }
 });
-export const taskUpdateSchema = taskBaseSchema.extend({
+const taskUpdateFieldsSchema = taskBaseSchema.extend({
   id: mongoObjectIdSchema,
   completionIntent: z.enum(['preserve', 'set']).default('preserve'),
   body: taskUpdateBodySchema,
   dueDate: taskUpdateDueDateSchema,
   priority: taskPrioritySchema.optional(),
+  recurrenceFrequency: recurrenceChoiceSchema.optional(),
+  recurrenceInterval: recurrenceIntervalSchema.optional(),
 });
 
-export const taskEditFormSchema = taskUpdateSchema
-  .omit({ id: true });
+const taskEditFieldsSchema = taskUpdateFieldsSchema.omit({ id: true });
+
+export const taskUpdateSchema = taskUpdateFieldsSchema.superRefine((value, context) => {
+  if (value.recurrenceFrequency && value.recurrenceFrequency !== 'none' && value.dueDate === '') {
+    context.addIssue({ code: 'custom', path: ['dueDate'], message: 'A due date is required for recurring Todos.' });
+  }
+});
+
+export const taskEditFormSchema = taskEditFieldsSchema.superRefine((value, context) => {
+  if (value.recurrenceFrequency && value.recurrenceFrequency !== 'none' && value.dueDate === '') {
+    context.addIssue({ code: 'custom', path: ['dueDate'], message: 'A due date is required for recurring Todos.' });
+  }
+});
 export const formSchema = taskCreateSchema;
 export const taskToggleSchema = z.object({
   id: mongoObjectIdSchema,

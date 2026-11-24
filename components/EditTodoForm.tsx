@@ -7,36 +7,70 @@ import { Field } from '@/components/ui/field';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { taskEditFormSchema } from '@/schema';
-import { updateTodoAction } from '@/prisma/actions/todo.action';
-import { type FormEvent, useState } from 'react';
+import { stopTodoRecurrenceAction, updateTodoAction } from '@/prisma/actions/todo.action';
+import { type FormEvent, useRef, useState } from 'react';
 import Spinner from './spinner';
 import { ITodos } from '@/interfaces';
 import { TodoFormFields } from './TodoFormFields';
 import { formatDateForInput } from '@/lib/utils';
+import { RecurrenceFields } from './RecurrenceFields';
+import type { RecurrenceChoice } from '@/lib/validations/task';
+import { useToast } from '@/components/ui/toast-provider';
 
 interface IProps {
   todo: ITodos;
 }
 
 const EditTodoForm = ({ todo }: IProps) => {
+  const toast = useToast();
+  const submittingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [completionIntent, setCompletionIntent] = useState(false);
   const currentTodoValues = {
     title: todo.title,
     body: todo.body ?? '',
     completed: todo.completed,
     dueDate: formatDateForInput(todo.dueDate),
     priority: todo.priority ?? 'medium',
+    recurrenceFrequency: todo.recurrence?.active ? todo.recurrence.frequency : 'none' as const,
+    recurrenceInterval: todo.recurrence?.interval ?? 1,
   };
 
   const form = useForm({
     resolver: zodResolver(taskEditFormSchema),
     defaultValues: currentTodoValues,
   });
+  const recurrenceFrequency = form.watch('recurrenceFrequency');
+  const recurrenceInterval = form.watch('recurrenceInterval');
+
+  const normalizeEditableValues = (values: {
+    title: string;
+    body?: string;
+    dueDate?: string;
+    priority?: string | null;
+    recurrenceFrequency?: RecurrenceChoice;
+    recurrenceInterval?: number;
+  }) => ({
+    title: values.title.trim(),
+    body: (values.body ?? '').trim(),
+    dueDate: formatDateForInput(values.dueDate),
+    priority: values.priority ?? 'medium',
+    recurrenceFrequency: values.recurrenceFrequency ?? 'none',
+    recurrenceInterval: values.recurrenceFrequency && values.recurrenceFrequency !== 'none'
+      ? values.recurrenceInterval ?? 1
+      : 1,
+  });
 
   const onSubmit = async (data: ReturnType<typeof taskEditFormSchema.parse>) => {
+    if (submittingRef.current) return;
+    if (
+      JSON.stringify(normalizeEditableValues(data)) ===
+      JSON.stringify(normalizeEditableValues(currentTodoValues))
+    ) {
+      toast.info('No changes to save.');
+      return;
+    }
+    submittingRef.current = true;
     setLoading(true);
     try {
       await updateTodoAction({
@@ -44,22 +78,39 @@ const EditTodoForm = ({ todo }: IProps) => {
         title: data.title,
         body: data.body,
         completed: data.completed,
-        completionIntent: completionIntent ? 'set' : 'preserve',
+        completionIntent: 'preserve',
         dueDate: data.dueDate,
         priority: data.priority,
+        recurrenceFrequency: data.recurrenceFrequency,
+        recurrenceInterval: data.recurrenceInterval,
       });
-      setSubmitError(null);
+      toast.success('Todo updated successfully.');
       setOpen(false);
-    } catch (error) {
-      console.error('Failed to update todo:', error);
-      setSubmitError("Couldn't save your changes. Please try again.");
+    } catch {
+      toast.error("Couldn't save your changes. Please try again.");
     } finally {
+      submittingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const stopRecurrence = async () => {
+    if (submittingRef.current || !todo.recurrence?.active) return;
+    submittingRef.current = true;
+    setLoading(true);
+    try {
+      await stopTodoRecurrenceAction({ id: todo.id });
+      toast.success('Recurrence stopped successfully.');
+      setOpen(false);
+    } catch {
+      toast.error("Couldn't stop this recurrence. Please try again.");
+    } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
-    setSubmitError(null);
     return form.handleSubmit(onSubmit)(event);
   };
 
@@ -68,8 +119,6 @@ const EditTodoForm = ({ todo }: IProps) => {
       open={open}
       onOpenChange={(nextOpen) => {
         if (nextOpen) {
-          setSubmitError(null);
-          setCompletionIntent(false);
           form.reset(currentTodoValues);
         }
         setOpen(nextOpen);
@@ -88,28 +137,19 @@ const EditTodoForm = ({ todo }: IProps) => {
             descriptionLabel="Edit Description"
             titleId="edit-title"
             descriptionId="edit-description"
-            completedId="edit-completed"
-            onCompletedChange={() => setCompletionIntent(true)}
+            dueDateRequired={recurrenceFrequency !== 'none'}
           />
 
-          {submitError && (
-            <div
-              role="alert"
-              className="flex items-start justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              <span>{submitError}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto shrink-0 px-2 py-1 text-destructive"
-                onClick={() => setSubmitError(null)}
-                aria-label="Dismiss error"
-              >
-                Dismiss
-              </Button>
-            </div>
-          )}
+          <RecurrenceFields
+            idPrefix={`edit-${todo.id}`}
+            frequency={recurrenceFrequency}
+            interval={recurrenceInterval}
+            disabled={todo.recurrence?.active === true && !todo.recurrence.isCurrent}
+            onFrequencyChange={(value: RecurrenceChoice) => form.setValue('recurrenceFrequency', value, { shouldValidate: true })}
+            onIntervalChange={(value) => form.setValue('recurrenceInterval', value, { shouldValidate: true })}
+            intervalError={form.formState.errors.recurrenceInterval?.message}
+          />
+          {todo.recurrence?.active && !todo.recurrence.isCurrent && <p className="text-xs text-muted-foreground">Recurrence settings belong to the current occurrence. You can stop this series here.</p>}
 
           <DialogFooter className="gap-2 sm:justify-end">
             <Field orientation="horizontal" className="flex-wrap justify-end gap-2">
@@ -118,9 +158,10 @@ const EditTodoForm = ({ todo }: IProps) => {
                   <X size={16} />
                 </Button>
               </DialogClose>
-              <Button type="button" variant="outline" onClick={() => { setCompletionIntent(false); form.reset(currentTodoValues); }}>
+              <Button type="button" variant="outline" onClick={() => form.reset(currentTodoValues)}>
                 Reset
               </Button>
+              {todo.recurrence?.active && <Button type="button" variant="outline" disabled={loading} onClick={stopRecurrence}>Stop recurrence</Button>}
               <Button type="submit" disabled={loading}>
                 {loading ? <Spinner /> : 'Submit'}
               </Button>

@@ -21,6 +21,7 @@ import { formatDueDate, truncateDescription } from '@/lib/utils';
 import type { TaskPriority } from '@/lib/validations/task';
 import { deleteTodoAction, toggleTodoAction } from '@/prisma/actions/todo.action';
 import SubtaskChecklist from '@/components/SubtaskChecklist';
+import { useToast } from '@/components/ui/toast-provider';
 
 interface IProps {
   todos: ITodos[];
@@ -60,6 +61,14 @@ const PRIORITY_VARIANTS = {
   high: 'destructive',
 } as const;
 
+const recurrenceLabel = (todo: ITodos) => {
+  if (!todo.recurrence) return null;
+  if (!todo.recurrence.active) return 'Recurrence stopped';
+  const unit = { daily: 'day', weekly: 'week', monthly: 'month' }[todo.recurrence.frequency];
+  const frequency = { daily: 'daily', weekly: 'weekly', monthly: 'monthly' }[todo.recurrence.frequency];
+  return todo.recurrence.interval === 1 ? `Repeats ${frequency}` : `Every ${todo.recurrence.interval} ${unit}s`;
+};
+
 const getCreatedAtTime = (value?: Date | string): number | null => {
   if (!value) return null;
   const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -88,6 +97,7 @@ export default function TodoTable({
   todos: initialTodos,
   emptyMessage = "You don't have any todos yet.",
 }: IProps) {
+  const toast = useToast();
   const [todos, updateTodos] = useOptimistic<ITodos[], TodoAction>(initialTodos, (state, action) => {
     switch (action.type) {
       case 'delete':
@@ -177,10 +187,10 @@ export default function TodoTable({
 
           try {
             await deleteTodoAction({ id });
-          } catch (actionError) {
-            console.error('Failed to delete todo', actionError);
+            toast.success('Todo deleted successfully.');
+          } catch {
             updateTodos({ type: 'restore', todo: deletedTodo, index: todoIndex });
-            setError('Failed to delete the task. It is still in your list, please try again.');
+            toast.error('Failed to delete the task. It is still in your list, please try again.');
           } finally {
             resolve();
           }
@@ -323,6 +333,7 @@ export default function TodoTable({
                     <h3 className="wrap-anywhere font-semibold">
                       {todo.title}
                       {todo.todoType === 'withSubtasks' && <span className="ml-2 inline-flex rounded-[5px] border px-2 py-0.5 text-xs font-medium text-muted-foreground">Todo with Subtasks</span>}
+                      {recurrenceLabel(todo) && <span className="ml-2 inline-flex rounded-[5px] border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">{recurrenceLabel(todo)}</span>}
                     </h3>
                     {todo.body && (
                       <p className="wrap-anywhere text-sm text-muted-foreground">
@@ -373,7 +384,11 @@ export default function TodoTable({
                   <Fragment key={todo.id}>
                   <TableRow key={todo.id} className={todo.todoType === 'withSubtasks' ? 'border-x border-t border-b-0 [&>td]:border-b-0' : undefined}>
                     <TableCell className="wrap-anywhere whitespace-normal font-medium">
-                      {todo.todoType === 'withSubtasks' ? <div className="rounded-[5px] border-l-[5px] border-primary/40 py-1 pl-3"><span>{todo.title}</span><span className="ml-2 text-xs font-normal text-muted-foreground">Todo with Subtasks</span></div> : todo.title}
+                      <div className={todo.todoType === 'withSubtasks' ? 'rounded-[5px] border-l-[5px] border-primary/40 py-1 pl-3' : undefined}>
+                        <span>{todo.title}</span>
+                        {todo.todoType === 'withSubtasks' && <span className="ml-2 text-xs font-normal text-muted-foreground">Todo with Subtasks</span>}
+                        {recurrenceLabel(todo) && <span className="ml-2 inline-flex rounded-[5px] border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-normal text-primary">{recurrenceLabel(todo)}</span>}
+                      </div>
                     </TableCell>
                     <TableCell className="wrap-anywhere whitespace-normal">
                       {todo.body ? truncateDescription(todo.body) : null}

@@ -6,6 +6,7 @@ import {
   taskIdSchema,
   taskPrioritySchema,
   mongoObjectIdSchema,
+  MAX_RECURRENCE_INTERVAL,
 } from '@/lib/validations/task';
 import { subtaskCreateSchema, subtaskUpdateSchema } from '@/lib/validations/subtask';
 import { describe, expect, it } from 'vitest';
@@ -59,6 +60,30 @@ describe('task validation schemas', () => {
       })
     ).toMatchObject({ dueDate: undefined, priority: 'medium' });
     expect(taskPrioritySchema.parse('high')).toBe('high');
+  });
+
+  it('requires a due date for recurrence and accepts only positive integer intervals', () => {
+    expect(taskCreateSchema.safeParse({ title: 'Recurring task', completed: false, recurrenceFrequency: 'daily' }).success).toBe(false);
+    expect(taskCreateSchema.safeParse({ title: 'Recurring task', completed: false, dueDate: '2026-01-01', recurrenceFrequency: 'weekly', recurrenceInterval: 2 }).success).toBe(true);
+    expect(taskUpdateSchema.safeParse({ id: todoId, title: 'Recurring task', completed: false, dueDate: '', recurrenceFrequency: 'daily', recurrenceInterval: 1 }).success).toBe(false);
+    expect(taskCreateSchema.safeParse({ title: 'Recurring task', completed: false, dueDate: '2026-01-01', recurrenceFrequency: 'daily', recurrenceInterval: MAX_RECURRENCE_INTERVAL }).success).toBe(true);
+    expect(taskUpdateSchema.safeParse({ id: todoId, title: 'Recurring task', completed: false, dueDate: '2026-01-01', recurrenceFrequency: 'daily', recurrenceInterval: MAX_RECURRENCE_INTERVAL }).success).toBe(true);
+    for (const recurrenceInterval of [0, -1, 1.5, MAX_RECURRENCE_INTERVAL + 1]) {
+      expect(taskCreateSchema.safeParse({ title: 'Recurring task', completed: false, dueDate: '2026-01-01', recurrenceFrequency: 'monthly', recurrenceInterval }).success).toBe(false);
+      expect(taskUpdateSchema.safeParse({ id: todoId, title: 'Recurring task', completed: false, dueDate: '2026-01-01', recurrenceFrequency: 'monthly', recurrenceInterval }).success).toBe(false);
+    }
+  });
+
+  it('rejects creating a completed Todo with recurrence enabled', () => {
+    const result = taskCreateSchema.safeParse({
+      title: 'Completed recurring task',
+      completed: true,
+      dueDate: '2026-01-01',
+      recurrenceFrequency: 'daily',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['completed'] }));
   });
 
   it('accepts valid date-only values and rejects invalid calendar dates', () => {

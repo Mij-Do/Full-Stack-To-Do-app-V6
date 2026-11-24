@@ -12,11 +12,20 @@ const SKELETON_ROWS = 5;
 
 export default function Loading() {
     return (
-        <div className="mx-auto w-full max-w-5xl space-y-4">
+        <div role="status" aria-label="Loading dashboard" aria-busy="true" className="mx-auto w-full max-w-5xl space-y-4">
             <div className="space-y-2 rounded-xl border p-4">
                 <Skeleton className="h-5 w-24" />
                 <Skeleton className="h-9 w-full" />
                 <Skeleton className="h-9 w-2/3" />
+            </div>
+            <div aria-hidden="true" className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+                {Array.from({ length: 7 }).map((_, i) => (
+                    <div key={i} className="space-y-3 rounded-xl border bg-card p-3 shadow-sm">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-7 w-10" />
+                        <Skeleton className="h-3 w-20" />
+                    </div>
+                ))}
             </div>
             {/* 1. Mobile View Skeleton */}
             <div className="grid grid-cols-1 gap-4 md:hidden">

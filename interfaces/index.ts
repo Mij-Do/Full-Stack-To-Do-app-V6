@@ -1,4 +1,4 @@
-import type { TaskPriority } from '@/lib/validations/task';
+import type { RecurrenceFrequency, TaskPriority } from '@/lib/validations/task';
 
 export interface ITodos {
     id: string;
@@ -10,6 +10,13 @@ export interface ITodos {
     priority?: TaskPriority | null;
     todoType?: 'standalone' | 'withSubtasks';
     subtasks?: ITodoSubtask[];
+    recurrence?: {
+        id: string;
+        frequency: RecurrenceFrequency;
+        interval: number;
+        active: boolean;
+        isCurrent: boolean;
+    } | null;
 }
 
 export interface ITodoSubtask {

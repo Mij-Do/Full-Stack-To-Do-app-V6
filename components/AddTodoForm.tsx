@@ -9,13 +9,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { formSchema, type TodoFormValues } from '@/schema';
 import { createTodoAction } from '@/prisma/actions/todo.action';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import Spinner from './spinner';
 import { TodoFormFields } from './TodoFormFields';
+import { RecurrenceFields } from './RecurrenceFields';
+import type { RecurrenceChoice } from '@/lib/validations/task';
+import { useToast } from '@/components/ui/toast-provider';
 const AddTodoForm = () => {
+  const toast = useToast();
+  const submittingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [todoType, setTodoType] = useState<'standalone' | 'withSubtasks'>('standalone');
   const [initialSubtasks, setInitialSubtasks] = useState<string[]>([]);
   const [newSubtask, setNewSubtask] = useState('');
@@ -27,48 +31,52 @@ const AddTodoForm = () => {
     priority: 'medium' as const,
     todoType: 'standalone' as const,
     initialSubtasks: [] as string[],
+    recurrenceFrequency: 'none' as const,
+    recurrenceInterval: 1,
   };
 
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: currentDefaultValues,
   });
+  const recurrenceFrequency = form.watch('recurrenceFrequency');
+  const recurrenceInterval = form.watch('recurrenceInterval');
 
   const selectTodoType = (value: 'standalone' | 'withSubtasks') => {
     setTodoType(value);
-    if (value === 'withSubtasks' && initialSubtasks.length > 0) {
-      form.setValue('completed', false);
-    }
   };
 
   const onSubmit = async (data: TodoFormValues) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     try {
       await createTodoAction({
         title: data.title,
         body: data.body,
-        completed: data.completed,
+        completed: false,
         dueDate: data.dueDate,
         priority: data.priority,
         todoType,
         initialSubtasks: todoType === 'withSubtasks' ? initialSubtasks : [],
+        recurrenceFrequency: data.recurrenceFrequency,
+        recurrenceInterval: data.recurrenceInterval,
       });
       form.reset();
       setTodoType('standalone');
       setInitialSubtasks([]);
       setNewSubtask('');
-      setSubmitError(null);
+      toast.success('Todo added successfully.');
       setOpen(false);
-    } catch (error) {
-      console.error(error);
-      setSubmitError("Couldn't create the task. Please try again.");
+    } catch {
+      toast.error("Couldn't create the task. Please try again.");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
-    setSubmitError(null);
     return form.handleSubmit(onSubmit)(event);
   };
 
@@ -76,7 +84,6 @@ const AddTodoForm = () => {
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) setSubmitError(null);
         if (nextOpen) {
           form.reset(currentDefaultValues);
           setTodoType('standalone');
@@ -109,8 +116,16 @@ const AddTodoForm = () => {
             control={form.control}
             titleId="add-title"
             descriptionId="add-description"
-            completedId="add-completed"
-            completedDisabled={todoType === 'withSubtasks' && initialSubtasks.length > 0}
+            dueDateRequired={recurrenceFrequency !== 'none'}
+          />
+
+          <RecurrenceFields
+            idPrefix="add"
+            frequency={recurrenceFrequency}
+            interval={recurrenceInterval}
+            onFrequencyChange={(value: RecurrenceChoice) => form.setValue('recurrenceFrequency', value, { shouldValidate: true })}
+            onIntervalChange={(value) => form.setValue('recurrenceInterval', value, { shouldValidate: true })}
+            intervalError={form.formState.errors.recurrenceInterval?.message}
           />
 
           {todoType === 'withSubtasks' && (
@@ -119,7 +134,7 @@ const AddTodoForm = () => {
               <p className="text-xs text-muted-foreground">The parent Todo stays active while any subtask is pending.</p>
               <div className="flex gap-2">
                 <Input aria-label="New subtask title" placeholder="Add a subtask" maxLength={80} value={newSubtask} onChange={(event) => setNewSubtask(event.target.value)} />
-                <Button type="button" variant="outline" disabled={!newSubtask.trim()} onClick={() => { setInitialSubtasks((items) => [...items, newSubtask.trim()]); form.setValue('completed', false); setNewSubtask(''); }}>Add subtask</Button>
+                <Button type="button" variant="outline" disabled={!newSubtask.trim()} onClick={() => { setInitialSubtasks((items) => [...items, newSubtask.trim()]); setNewSubtask(''); }}>Add subtask</Button>
               </div>
               <div role="group" aria-label="Pending subtasks" className="space-y-2">
                 {initialSubtasks.map((subtask, index) => (
@@ -131,25 +146,6 @@ const AddTodoForm = () => {
                 ))}
               </div>
             </section>
-          )}
-
-          {submitError && (
-            <div
-              role="alert"
-              className="flex items-start justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              <span>{submitError}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto shrink-0 px-2 py-1 text-destructive"
-                onClick={() => setSubmitError(null)}
-                aria-label="Dismiss error"
-              >
-                Dismiss
-              </Button>
-            </div>
           )}
 
           <DialogFooter className="gap-2 sm:justify-end">

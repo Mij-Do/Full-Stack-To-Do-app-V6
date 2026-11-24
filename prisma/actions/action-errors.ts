@@ -1,3 +1,5 @@
+import { Prisma } from '@/generated/prisma';
+
 export class ActionDomainError extends Error {
   constructor(message: string) {
     super(message);
@@ -49,6 +51,13 @@ const safeErrorDiagnostics = (error: unknown) => {
   };
 };
 
+const isPrismaPersistenceError = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError ||
+  error instanceof Prisma.PrismaClientUnknownRequestError ||
+  error instanceof Prisma.PrismaClientRustPanicError ||
+  error instanceof Prisma.PrismaClientInitializationError ||
+  error instanceof Prisma.PrismaClientValidationError;
+
 export const normalizeTransactionError = (
   error: unknown,
   fallbackMessage: string,
@@ -56,6 +65,10 @@ export const normalizeTransactionError = (
 ): Error => {
   if (error instanceof ActionDomainError) {
     return new Error(error.message);
+  }
+
+  if (!isPrismaPersistenceError(error)) {
+    throw error;
   }
 
   if (operation === 'deleteTodoAction') {
@@ -70,4 +83,16 @@ export const normalizeTransactionError = (
   }
 
   return new Error(fallbackMessage);
+};
+
+export const runWithPersistenceError = async <T>(
+  operation: () => Promise<T>,
+  fallbackMessage: string,
+  operationName?: string,
+): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    throw normalizeTransactionError(error, fallbackMessage, operationName);
+  }
 };
