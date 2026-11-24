@@ -15,7 +15,7 @@ vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
 vi.mock('@/lib/prisma', () => ({ prisma: { ...prismaMock, todo: todoMock, todoSubtask: todoSubtaskMock, todoRecurrence: todoRecurrenceMock } }));
 
 import { createTodoAction, deleteTodoAction, stopTodoRecurrenceAction, toggleTodoAction, updateTodoAction } from '@/prisma/actions/todo.action';
-import { getUserTodoList } from '@/prisma/queries/todo.query';
+import { getUserTodos } from '@/prisma/queries/todo.query';
 
 const todoId = '0123456789abcdef01234567';
 const childId = '1123456789abcdef01234567';
@@ -453,9 +453,9 @@ describe('Todo deletion', () => {
 
 describe('Todo reads', () => {
   it('returns no records without an owner and scopes reads to authenticated owner IDs', async () => {
-    await expect(getUserTodoList(null)).resolves.toEqual([]);
+    await expect(getUserTodos(null)).resolves.toEqual([]);
     todoMock.findMany.mockResolvedValue([]);
-    await getUserTodoList('owner_A');
+    await getUserTodos('owner_A');
     expect(todoMock.findMany).toHaveBeenCalledWith({ where: { user_id: 'owner_A' }, orderBy: { createdAt: 'desc' } });
   });
 });

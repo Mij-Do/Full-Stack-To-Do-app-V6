@@ -14,12 +14,11 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }));
 vi.mock('next/cache', () => ({ revalidatePath: revalidatePathMock }));
 
 import {
-  createSubtaskAction,
   deleteTodoAction,
   stopTodoRecurrenceAction,
-  toggleSubtaskAction,
   toggleTodoAction,
 } from '@/prisma/actions/todo.action';
+import { createSubtaskAction, toggleSubtaskAction } from '@/prisma/actions/subtask.action';
 
 const CAS_MISS_CURSOR_ID = 'ffffffffffffffffffffffff';
 const ACCEPTED_RETRY_MESSAGES = new Set([

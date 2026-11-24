@@ -20,6 +20,9 @@ vi.mock('@/prisma/actions/todo.action', () => ({
   toggleTodoAction: vi.fn(),
   updateTodoAction: vi.fn(),
   stopTodoRecurrenceAction: vi.fn(),
+}));
+
+vi.mock('@/prisma/actions/subtask.action', () => ({
   createSubtaskAction: vi.fn(),
   deleteSubtaskAction: vi.fn(),
   toggleSubtaskAction: vi.fn(),

@@ -8,7 +8,7 @@ const { todoMock, todoSubtaskMock, todoRecurrenceMock } = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: { todo: todoMock, todoSubtask: todoSubtaskMock, todoRecurrence: todoRecurrenceMock } }));
 
-import { getUserTodoList } from '@/prisma/queries/todo.query';
+import { getUserTodos } from '@/prisma/queries/todo.query';
 
 const parentId = '0123456789abcdef01234567';
 
@@ -24,7 +24,7 @@ describe('unified Todo query', () => {
       { id: '1123456789abcdef01234567', todoId: parentId, title: 'Child', completed: false },
     ]);
 
-    await expect(getUserTodoList('owner_A')).resolves.toMatchObject([
+    await expect(getUserTodos('owner_A')).resolves.toMatchObject([
       { id: parentId, todoType: 'withSubtasks', subtasks: [{ title: 'Child' }] },
     ]);
     expect(todoMock.findMany).toHaveBeenCalledWith({
@@ -38,7 +38,7 @@ describe('unified Todo query', () => {
   });
 
   it('does not query for Todos or children without an authenticated user', async () => {
-    await expect(getUserTodoList(null)).resolves.toEqual([]);
+    await expect(getUserTodos(null)).resolves.toEqual([]);
     expect(todoMock.findMany).not.toHaveBeenCalled();
     expect(todoSubtaskMock.findMany).not.toHaveBeenCalled();
     expect(todoRecurrenceMock.findMany).not.toHaveBeenCalled();
@@ -49,7 +49,7 @@ describe('unified Todo query', () => {
     todoMock.findMany.mockResolvedValue([{ id: parentId, recurrenceSeriesId: seriesId, title: 'Recurring', completed: false }]);
     todoSubtaskMock.findMany.mockResolvedValue([]);
     todoRecurrenceMock.findMany.mockResolvedValue([{ id: seriesId, frequency: 'weekly', interval: 2, active: true, currentTodoId: parentId, user_id: 'owner_A' }]);
-    await expect(getUserTodoList('owner_A')).resolves.toMatchObject([
+    await expect(getUserTodos('owner_A')).resolves.toMatchObject([
       { id: parentId, recurrence: { id: seriesId, frequency: 'weekly', interval: 2, active: true, isCurrent: true } },
     ]);
     expect(todoRecurrenceMock.findMany).toHaveBeenCalledWith({ where: { id: { in: [seriesId] }, user_id: 'owner_A' } });

@@ -2,7 +2,7 @@ import AddTodoForm from '@/components/AddTodoForm';
 import TodoDashboardMetrics from '@/components/TodoDashboardMetrics';
 import TodoTable from '@/components/todoTable';
 import { calculateTodoDashboardMetrics } from '@/lib/dashboard';
-import { getUserTodoList } from '@/prisma/queries/todo.query';
+import { getUserTodos } from '@/prisma/queries/todo.query';
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
@@ -13,7 +13,7 @@ export default async function Home() {
     redirect('/sign-in');
   }
 
-  const todos = await getUserTodoList(userId);
+  const todos = await getUserTodos(userId);
   const metrics = calculateTodoDashboardMetrics(todos);
 
   return (

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ITodoSubtask } from '@/interfaces';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { createSubtaskAction, deleteSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/prisma/actions/todo.action';
+import { createSubtaskAction, deleteSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/prisma/actions/subtask.action';
 
 const EMPTY_SUBTASKS: ITodoSubtask[] = [];
 

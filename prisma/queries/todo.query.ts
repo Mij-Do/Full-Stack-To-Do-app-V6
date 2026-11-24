@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import type { ITodos } from '@/interfaces';
 
-export const getUserTodoList = async (userId: string | null) => {
+export const getUserTodos = async (userId: string | null): Promise<ITodos[]> => {
   if (!userId) {
     return [];
   }
@@ -21,7 +22,11 @@ export const getUserTodoList = async (userId: string | null) => {
     where: { id: { in: todos.flatMap((todo) => todo.recurrenceSeriesId ? [todo.recurrenceSeriesId] : []) }, user_id: userId },
   })]);
   const byTodo = new Map<string, typeof subtasks>();
-  for (const subtask of subtasks) byTodo.set(subtask.todoId, [...(byTodo.get(subtask.todoId) ?? []), subtask]);
+  for (const subtask of subtasks) {
+    const grouped = byTodo.get(subtask.todoId);
+    if (grouped) grouped.push(subtask);
+    else byTodo.set(subtask.todoId, [subtask]);
+  }
   const byRecurrence = new Map(recurrences.map((recurrence) => [recurrence.id, recurrence]));
   return todos.map((todo) => ({
     ...todo,

@@ -9,7 +9,7 @@ const { authMock, redirectMock, getTodosMock } = vi.hoisted(() => ({
 
 vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }));
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
-vi.mock('@/prisma/queries/todo.query', () => ({ getUserTodoList: getTodosMock }));
+vi.mock('@/prisma/queries/todo.query', () => ({ getUserTodos: getTodosMock }));
 vi.mock('@/lib/prisma', () => ({ prisma: {} }));
 
 import Home from '@/app/page';

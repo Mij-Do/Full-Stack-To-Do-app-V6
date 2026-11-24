@@ -13,7 +13,8 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: authMock }));
 vi.mock('next/cache', () => ({ revalidatePath: revalidateMock }));
 vi.mock('@/lib/prisma', () => ({ prisma: { ...prismaMock, todo: todoMock, todoSubtask: subtaskMock, todoRecurrence: recurrenceMock } }));
 
-import { createSubtaskAction, deleteSubtaskAction, deleteTodoAction, toggleSubtaskAction, toggleTodoAction, updateSubtaskAction, updateTodoAction } from '@/prisma/actions/todo.action';
+import { deleteTodoAction, toggleTodoAction, updateTodoAction } from '@/prisma/actions/todo.action';
+import { createSubtaskAction, deleteSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/prisma/actions/subtask.action';
 
 const parentId = '0123456789abcdef01234567';
 const childId = '1123456789abcdef01234567';

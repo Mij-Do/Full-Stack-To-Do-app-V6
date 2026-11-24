@@ -1,6 +1,12 @@
 import type { Prisma } from '@/generated/prisma';
 import { calculateNextRecurrenceDate } from '@/lib/recurrence';
+import { prisma } from '@/lib/prisma';
 import { ActionDomainError } from '@/prisma/actions/action-errors';
+
+export const assertTopLevelTodoId = async (id: string, userId: string) => {
+  const subtask = await prisma.todoSubtask.findFirst({ where: { id, user_id: userId }, select: { id: true } });
+  if (subtask) throw new ActionDomainError('Todo not found');
+};
 
 export type RecurrenceSource = {
   id: string;

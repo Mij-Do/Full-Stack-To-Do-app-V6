@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SubtaskChecklist from '@/components/SubtaskChecklist';
-import { createSubtaskAction, deleteSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/prisma/actions/todo.action';
+import { createSubtaskAction, deleteSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/prisma/actions/subtask.action';
 
-vi.mock('@/prisma/actions/todo.action', () => ({
+vi.mock('@/prisma/actions/subtask.action', () => ({
   createSubtaskAction: vi.fn(), updateSubtaskAction: vi.fn(), toggleSubtaskAction: vi.fn(), deleteSubtaskAction: vi.fn(),
 }));
 
